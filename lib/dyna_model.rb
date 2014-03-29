@@ -1,195 +1,177 @@
 require "dyna_model/version"
+require "dyna_model/config"
+require "dyna_model/attributes"
+require "dyna_model/schema"
+require "dyna_model/document"
 
-module AWS
-  module Record
-    class DynaModel
+#require "toy/dynamo/adapter"
+#require "toy/dynamo/schema"
+#require "toy/dynamo/table"
+#require "toy/dynamo/tasks"
+#require "toy/dynamo/querying"
+#require "toy/dynamo/response"
+#require "toy/dynamo/persistence"
+# Override 'write_attribute' for hash_key == id
+#require "toy/dynamo/attributes"
+#require "toy/dynamo/store"
+#require "toy/dynamo/extensions/array"
+#require "toy/dynamo/extensions/boolean"
+#require "toy/dynamo/extensions/date"
+#require "toy/dynamo/extensions/hash"
+#require "toy/dynamo/extensions/set"
+#require "toy/dynamo/extensions/time"
+#require "toy/dynamo/extensions/symbol"
+#require "toy/dynamo/extensions/float"
 
-      require "dyna_model/attributes"
-      require "dyna_model/finder_methods"
-      #require 'aws/record/hash_model/attributes'
-      #require 'aws/record/hash_model/finder_methods'
-      #require 'aws/record/hash_model/scope'
+module DynaModel
+  extend self
 
-      extend AbstractBase
+  def configure
+    block_given? ? yield(DynaModel::Config) : DynaModel::Config
+  end
+  alias :config :configure
+
+  def logger
+    DynaModel::Config.logger
+  end
+
+end
+
+
+#module AWS
+  #module Record
+    #class DynaModel
+
+      #require "dyna_model/attributes"
+      #require "dyna_model/finder_methods"
+      #require "dyna_model/dynamo_table"
+      #require "dyna_model/config"
+      ##require 'aws/record/hash_model/attributes'
+      ##require 'aws/record/hash_model/finder_methods'
+      ##require 'aws/record/hash_model/scope'
+
+      #extend AbstractBase
 
       #def self.inherited(sub_class)
-        #sub_class.string_attr :id,
-          #:hash_key => true,
-          #:default_hash_key_attribute => true
+        ##sub_class.attr_reader :guid #, :hash_key => true, :default_hash_key_attribute => true
       #end
 
-      # @return [String,nil]
-      #def hash_key
-        #self[self.class.hash_key]
-      #end
+      ##@return [String,nil]
+      ##def hash_key
+        ##self[self.class.hash_key]
+      ##end
 
       #class << self
 
-        ## Creates the DynamoDB table that is configured for this class.
-        ##
-        ##     class Product < AWS::Record::HashModel
-        ##     end
-        ##
-        ##     # create the table 'Product' with 10 read/write capacity units
-        ##     Product.create_table 10, 10
-        ##
-        ## If you shard you data across multiple tables, you can specify the
-        ## shard name:
-        ##
-        ##     # create two tables, with the given names
-        ##     Product.create_table 500, 10, :shard_name => 'products-1'
-        ##     Product.create_table 500, 10, :shard_name => 'products-2'
-        ##
-        ## If you share a single AWS account with multiple applications, you
-        ## can provide a table prefix to group tables and to avoid name
-        ## collisions:
-        ##
-        ##     AWS::Record.table_prefix = 'myapp-'
-        ##
-        ##     # creates the table 'myapp-Product'
-        ##     Product.create_table 250, 50
-        ##
-        ##     # creates the table 'myapp-products-1'
-        ##     Product.create_table 250, 50, :shard_name => 'products-1'
-        ##
-        ## @param [Integer] read_capacity_units
-        ##   See {DynamoDB::TableCollection#create} for more information.
-        ##
-        ## @param [Integer] write_capacity_units
-        ##   See {DynamoDB::TableCollection#create} for more information.
-        ##
-        ## @param [Hash] options
-        ##
-        ## @option options [String] :shard_name Defaults to the class name.  The
-        ##   shard name will be prefixed with {AWS::Record.table_prefix},
-        ##   and that becomes the table name.
-        ##
-        ## @return [DynamoDB::Table]
-        ##
-        #def create_table read_capacity_units, write_capacity_units, options = {}
+        #KEY_TYPE = {
+          #:hash => "HASH",
+          #:range => "RANGE"
+        #}
 
-          #table_name = dynamo_db_table_name(options[:shard_name])
+        #PROJECTION_TYPE = {
+          #:keys_only => "KEYS_ONLY",
+          #:all => "ALL",
+          #:include => "INCLUDE"
+        #}
 
-          #create_opts = {}
-          #create_opts[:hash_key] = { hash_key => :string }
+        #def dynamo_table(options={}, &block)
+          #if block
+            #@dynamo_table_config_block ||= block
+          #else
+            #@dynamo_table_config_block.call unless @dynamo_table_configged
 
-          #dynamo_db.tables.create(
-            #table_name,
-            #read_capacity_units,
-            #write_capacity_units,
-            #create_opts)
-
+            ##unless @dynamo_table && @dynamo_table_configged
+              ##begin
+                ##@dynamo_table = Table.new(table_schema, self.adapter.client, options)
+              ##rescue Exception => e
+                ### Reset table_schema
+                ##@local_secondary_indexes = []
+                ##raise e
+              ##end
+              ##unless options[:novalidate]
+                ##validate_key_schema if @dynamo_table.schema_loaded_from_dynamo
+              ##end
+              ##@dynamo_table_configged = true
+            ##end
+            #@dynamo_table
+          #end
         #end
 
-        ## @return [DynamoDB::Table]
-        ## @api private
-        #def dynamo_db_table shard_name = nil
-          #table = dynamo_db.tables[dynamo_db_table_name(shard_name)]
-          #table.hash_key = [hash_key, :string]
-          #table
+        #def read_provision(val=nil)
+          #if val
+            #raise(ArgumentError, "Invalid read provision") unless val.to_i >= 1
+            #@dynamo_read_provision = val.to_i
+          #else
+            #@dynamo_read_provision || AWS::Record::DynaModel::Config.read_provision
+          #end
         #end
 
-        ## @api private
-        #def hash_key
-          #hash_key_attribute.name
+        #def write_provision(val=nil)
+          #if val
+            #raise(ArgumentError, "Invalid write provision") unless val.to_i >= 1
+            #@dynamo_write_provision = val.to_i
+          #else
+            #@dynamo_write_provision || AWS::Record::DynaModel::Config.write_provision
+          #end
         #end
 
-        ## @api private
-        #def hash_key_attribute
-          #@hash_key_attribute
+        #def hash_key(hash_key_key=nil)
+          #if hash_key_key
+            #hash_key_attribute = self.attributes[hash_key_key.to_s]
+            #raise(ArgumentError, "Could not find attribute definition for hash_key #{hash_key_key}") unless hash_key_attribute
+            #raise(ArgumentError, "Invalid attribute type for hash_key") unless [AWS::Record::Attributes::StringAttr, AWS::Record::Attributes::IntegerAttr, AWS::Record::Attributes::FloatAttr].include?(hash_key_attribute.class)
+            #@dynamo_hash_key = {
+              #attribute_name: hash_key_attribute.name,
+              #key_type: KEY_TYPE[:hash]
+            #}
+          #else
+            #@dynamo_hash_key
+          #end
+        #end
+
+        #def range_key(range_key_key=nil)
+          #if range_key_key
+            #range_key_attribute = self.attributes[range_key_key.to_s]
+            #raise(ArgumentError, "Could not find attribute definition for range_key #{range_key_key}") unless range_key_attribute
+            #raise(ArgumentError, "Invalid attribute type for range_key") unless [AWS::Record::Attributes::StringAttr, AWS::Record::Attributes::IntegerAttr, AWS::Record::Attributes::FloatAttr].include?(range_key_attribute.class)
+
+            #validates_presence_of range_key_attribute.name.to_sym
+
+            #@dynamo_range_key = {
+              #attribute_name: range_key_attribute.name,
+              #key_type: KEY_TYPE[:range]
+            #}
+          #else
+            #@dynamo_range_key
+          #end
         #end
 
         #private
 
-        #def set_hash_key_attribute(attribute)
-          #if
-            #hash_key_attribute and
-            #hash_key_attribute.options[:default_hash_key_attribute]
-          #then
-            #remove_attribute(hash_key_attribute)
-          #end
-          #@hash_key_attribute = attribute
-        #end
+        ##def dynamo_db_table_name shard_name = nil
+          ##"#{Record.table_prefix}#{self.shard_name(shard_name)}"
+        ##end
 
-        #def dynamo_db_table_name shard_name = nil
-          #"#{Record.table_prefix}#{self.shard_name(shard_name)}"
-        #end
-
-        #def dynamo_db
-          #AWS::DynamoDB.new
-        #end
+        ##def dynamo_db
+          ##AWS::DynamoDB.new
+        ##end
 
         #def add_attribute(attribute)
-          #set_hash_key_attribute(attribute) if attribute.options[:hash_key]
           #super(attribute)
         #end
-
+        
       #end
 
       #private
 
       #def populate_id
-        #hash_key = self.class.hash_key_attribute
-        #if hash_key.options[:default_hash_key_attribute]
-          #self[hash_key.name] = UUIDTools::UUID.random_create.to_s.downcase
-        #end
+        ##hash_key = self.class.hash_key_attribute
+        ##if hash_key.options[:default_hash_key_attribute]
+          ##self[hash_key.name] = UUIDTools::UUID.random_create.to_s.downcase
+        ##end
       #end
 
-      ## @return [DynamoDB::Item] Returns a reference to the item as stored in
-      ##   simple db.
-      ## @api private
-      #private
-      #def dynamo_db_item
-        #dynamo_db_table.items[hash_key]
-      #end
+    #end
 
-      ## @return [SimpleDB::Domain] Returns the domain this record is
-      ##   persisted to or will be persisted to.
-      #private
-      #def dynamo_db_table
-        #self.class.dynamo_db_table(shard)
-      #end
-
-      #private
-      #def create_storage
-        #dynamo_db_table.items.create(serialize_attributes, opt_lock_conditions)
-      #end
-
-      #private
-      #def update_storage
-        ## Only enumerating dirty (i.e. changed) attributes.  Empty
-        ## (nil and empty set) values are deleted, the others are replaced.
-        #dynamo_db_item.attributes.update(opt_lock_conditions) do |u|
-          #changed.each do |attr_name|
-            #attribute = self.class.attribute_for(attr_name)
-            #value = serialize_attribute(attribute, @_data[attr_name])
-            #if value.nil? or value == []
-              #u.delete(attr_name)
-            #else
-              #u.set(attr_name => value)
-            #end
-          #end
-        #end
-      #end
-
-      #private
-      #def delete_storage
-        #dynamo_db_item.delete(opt_lock_conditions)
-      #end
-
-      #private
-      #def deserialize_item_data data
-        #data.inject({}) do |hash,(attr_name,value)|
-          #if attribute = self.class.attributes[attr_name]
-            #hash[attr_name] = value.is_a?(Set) ?
-              #value.map{|v| attribute.deserialize(v) } :
-              #attribute.deserialize(value)
-          #end
-          #hash
-        #end
-      #end
-
-    end
-
-  end
-end
+  #end
+#end
