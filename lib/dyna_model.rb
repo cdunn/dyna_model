@@ -2,6 +2,8 @@ require "dyna_model/version"
 require "dyna_model/config"
 require "dyna_model/attributes"
 require "dyna_model/schema"
+require "dyna_model/persistence"
+require "dyna_model/table"
 require "dyna_model/document"
 
 #require "toy/dynamo/adapter"
