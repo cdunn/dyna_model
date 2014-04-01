@@ -24,55 +24,6 @@ module DynaModel
         AWS::Record::Attributes::DateAttr => "N"
       }
 
-      #def dynamo_table(options={}, &block)
-        #if block
-          #@dynamo_table_config_block ||= block
-        #else
-          #@dynamo_table_config_block.call unless @dynamo_table_configged
-
-          #unless @dynamo_table && @dynamo_table_configged
-            #begin
-              ##@dynamo_table = Table.new(table_schema, self.adapter.client, options)
-            #rescue Exception => e
-              ## Reset table_schema
-              #@local_secondary_indexes = []
-              #raise e
-            #end
-            #unless options[:novalidate]
-              #validate_key_schema if @dynamo_table.schema_loaded_from_dynamo
-            #end
-            #@dynamo_table_configged = true
-          #end
-          #@dynamo_table
-        #end
-      #end
-
-      #def validate_key_schema
-        #if @dynamo_table.schema_loaded_from_dynamo[:table][:key_schema].sort_by { |k| k[:key_type] } != table_schema[:key_schema].sort_by { |k| k[:key_type] }
-          #raise ArgumentError, "It appears your key schema (Hash Key/Range Key) have changed from the table definition. Rebuilding the table is necessary."
-        #end
-
-        #if @dynamo_table.schema_loaded_from_dynamo[:table][:attribute_definitions].sort_by { |k| k[:attribute_name] } != table_schema[:attribute_definitions].sort_by { |k| k[:attribute_name] }
-          #raise ArgumentError, "It appears your attribute definition (types?) have changed from the table definition. Rebuilding the table is necessary."
-        #end
-
-        #if @dynamo_table.schema_loaded_from_dynamo[:table][:local_secondary_indexes].blank? != table_schema[:local_secondary_indexes].blank?
-          #raise ArgumentError, "It appears your local secondary indexes have changed from the table definition. Rebuilding the table is necessary."
-        #end
-        
-        #if @dynamo_table.schema_loaded_from_dynamo[:table][:local_secondary_indexes] && (@dynamo_table.schema_loaded_from_dynamo[:table][:local_secondary_indexes].dup.collect {|i| i.delete_if{|k, v| [:index_size_bytes, :item_count].include?(k) }; i }.sort_by { |lsi| lsi[:index_name] } != table_schema[:local_secondary_indexes].sort_by { |lsi| lsi[:index_name] })
-          #raise ArgumentError, "It appears your local secondary indexes have changed from the table definition. Rebuilding the table is necessary."
-        #end
-
-        #if @dynamo_table.schema_loaded_from_dynamo[:table][:provisioned_throughput][:read_capacity_units] != read_provision
-          #Toy::Dynamo::Config.logger.error "read_capacity_units mismatch. Need to update table?"
-        #end
-
-        #if @dynamo_table.schema_loaded_from_dynamo[:table][:provisioned_throughput][:write_capacity_units] != write_provision
-          #Toy::Dynamo::Config.logger.error "write_capacity_units mismatch. Need to update table?"
-        #end
-      #end
-
       def table_schema
         schema = {
           table_name: dynamo_db_table_name,
@@ -87,17 +38,6 @@ module DynaModel
         schema[:global_secondary_indexes] = global_secondary_indexes unless global_secondary_indexes.blank?
         schema
       end
-
-      #def table_name(val=nil)
-        #if val
-          #raise(ArgumentError, "Invalid table name") unless val
-          #@dynamo_table_name = val
-          #set_shard_name(val)
-        #else
-          #@dynamo_table_name ||= self.to_s.underscore.dasherize.pluralize.gsub(/[^a-zA-Z0-9_.-]/, '_')
-          #@dynamo_table_name
-        #end
-      #end
 
       def read_provision(val=nil)
         if val

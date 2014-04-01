@@ -24,8 +24,7 @@ module DynaModel
 
     private
     def create_storage
-      #self.dynamo_db_table.items.create(serialize_attributes, opt_lock_conditions)
-      raise serialize_attributes.inspect
+      self.class.dynamo_db_table.write(serialize_attributes)
     end
 
     private

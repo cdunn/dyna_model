@@ -51,7 +51,10 @@ module DynaModel
 
     class << self
 
-      def type_from_value(value)
+
+    end
+
+      def self.type_from_value(value)
         case
         when value.kind_of?(AWS::DynamoDB::Binary) then :b
         when value.respond_to?(:to_str) then :s
@@ -61,15 +64,15 @@ module DynaModel
         end
       end
 
-      def attr_with_type(attr_name, value)
+      def self.attr_with_type(attr_name, value)
         { attr_name => { TYPE_INDICATOR[type_from_value(value)] => value.to_s } }
       end
 
-    end
-
     def initialize(model)
       @model = model
-      self.load_schema# unless options[:novalidate]
+      @table_schema = model.table_schema
+      self.load_schema
+      self.validate_key_schema
     end
 
     def load_schema
@@ -108,6 +111,42 @@ module DynaModel
       @schema_loaded_from_dynamo
     end
 
+    def validate_key_schema
+      if @schema_loaded_from_dynamo[:table][:key_schema].sort_by { |k| k[:key_type] } != @table_schema[:key_schema].sort_by { |k| k[:key_type] }
+        raise ArgumentError, "It appears your key schema (Hash Key/Range Key) have changed from the table definition. Rebuilding the table is necessary."
+      end
+
+      if @schema_loaded_from_dynamo[:table][:attribute_definitions].sort_by { |k| k[:attribute_name] } != @table_schema[:attribute_definitions].sort_by { |k| k[:attribute_name] }
+        raise ArgumentError, "It appears your attribute definition (types?) have changed from the table definition. Rebuilding the table is necessary."
+      end
+
+      index_keys_to_reject = [:index_status, :index_size_bytes, :item_count]
+
+      if @schema_loaded_from_dynamo[:table][:local_secondary_indexes].blank? != @table_schema[:local_secondary_indexes].blank?
+        raise ArgumentError, "It appears your local secondary indexes have changed from the table definition. Rebuilding the table is necessary."
+      end
+      
+      if @schema_loaded_from_dynamo[:table][:local_secondary_indexes] && (@schema_loaded_from_dynamo[:table][:local_secondary_indexes].dup.collect {|i| i.delete_if{|k, v| index_keys_to_reject.include?(k) }; i }.sort_by { |lsi| lsi[:index_name] } != @table_schema[:local_secondary_indexes].sort_by { |lsi| lsi[:index_name] })
+        raise ArgumentError, "It appears your local secondary indexes have changed from the table definition. Rebuilding the table is necessary."
+      end
+
+      if @schema_loaded_from_dynamo[:table][:global_secondary_indexes].blank? != @table_schema[:global_secondary_indexes].blank?
+        raise ArgumentError, "It appears your global secondary indexes have changed from the table definition. Rebuilding the table is necessary."
+      end
+
+      if @schema_loaded_from_dynamo[:table][:global_secondary_indexes] && (@schema_loaded_from_dynamo[:table][:global_secondary_indexes].dup.collect {|i| i.delete_if{|k, v| index_keys_to_reject.include?(k) }; i }.sort_by { |gsi| gsi[:index_name] } != @table_schema[:global_secondary_indexes].sort_by { |gsi| gsi[:index_name] })
+        raise ArgumentError, "It appears your global secondary indexes have changed from the table definition. Rebuilding the table is necessary."
+      end
+
+      if @schema_loaded_from_dynamo[:table][:provisioned_throughput][:read_capacity_units] != @table_schema[:provisioned_throughput][:read_capacity_units]
+        Toy::Dynamo::Config.logger.error "read_capacity_units mismatch. Need to update table?"
+      end
+
+      if @schema_loaded_from_dynamo[:table][:provisioned_throughput][:write_capacity_units] != @table_schema[:provisioned_throughput][:write_capacity_units]
+        Toy::Dynamo::Config.logger.error "write_capacity_units mismatch. Need to update table?"
+      end
+    end
+
     def hash_key_item_param(value)
       hash_key = @table_schema[:key_schema].find{|h| h[:key_type] == "HASH"}[:attribute_name]
       hash_key_type = @table_schema[:attribute_definitions].find{|h| h[:attribute_name] == hash_key}[:attribute_type]
@@ -130,12 +169,12 @@ module DynaModel
       options[:select] ||= []
 
       get_item_request = {
-        :table_name => options[:table_name] || self.table_name,
-        :key => hash_key_item_param(hash_key),
-        :consistent_read => options[:consistent_read],
-        :return_consumed_capacity => RETURNED_CONSUMED_CAPACITY[options[:return_consumed_capacity]]
+        table_name: @model.dynamo_db_table_name(options[:shard_name]),
+        key: hash_key_item_param(hash_key),
+        consistent_read: options[:consistent_read],
+        return_consumed_capacity: RETURNED_CONSUMED_CAPACITY[options[:return_consumed_capacity]]
       }
-      get_item_request.merge!( :attributes_to_get => [options[:select]].flatten ) unless options[:select].blank?
+      get_item_request.merge!( attributes_to_get: [options[:select]].flatten ) unless options[:select].blank?
       @client.get_item(get_item_request)
     end
 
@@ -274,61 +313,61 @@ module DynaModel
       @client.batch_get_item(batch_get_item_request)
     end
 
-    def write(hash_key_value, attributes, options={})
+    def write(attributes, options={})
       options[:return_consumed_capacity] ||= :none
       options[:update_item] = false unless options[:update_item]
 
       if options[:update_item]
+        raise attributes.inspect
         # UpdateItem
-        key_request = {
-          @hash_key[:attribute_name] => {
-            @hash_key[:attribute_type] => hash_key_value.to_s
-          }
-        }
-        if @primary_range_key
-          range_key_value = attributes[@primary_range_key[:attribute_name]]
-          raise ArgumentError, "range_key was not provided to the write command" if range_key_value.blank?
-          key_request.merge!({
-            @primary_range_key[:attribute_name] => {
-              @primary_range_key[:attribute_type] => range_key_value.to_s
-            }
-          })
-        end
-        attrs_to_update = {}
-        attributes.each_pair do |k,v|
-          next if @primary_range_key && k == @primary_range_key[:attribute_name]
-          if v.blank?
-            attrs_to_update.merge!({ k => { :action => "DELETE" } })
-          else
-            attrs_to_update.merge!({
-              k => {
-                :value => attr_with_type(k,v).values.last,
-                :action => "PUT"
-              }
-            })
-          end
-        end
-        update_item_request = {
-          :table_name => options[:table_name] || self.table_name,
-          :key => key_request,
-          :attribute_updates => attrs_to_update,
-          :return_consumed_capacity => RETURNED_CONSUMED_CAPACITY[options[:return_consumed_capacity]]
-        }
-        @client.update_item(update_item_request)
+        #key_request = {
+          #@hash_key[:attribute_name] => {
+            #@hash_key[:attribute_type] => hash_key_value.to_s
+          #}
+        #}
+        #if @primary_range_key
+          #range_key_value = attributes[@primary_range_key[:attribute_name]]
+          #raise ArgumentError, "range_key was not provided to the write command" if range_key_value.blank?
+          #key_request.merge!({
+            #@primary_range_key[:attribute_name] => {
+              #@primary_range_key[:attribute_type] => range_key_value.to_s
+            #}
+          #})
+        #end
+        #attrs_to_update = {}
+        #attributes.each_pair do |k,v|
+          #next if @primary_range_key && k == @primary_range_key[:attribute_name]
+          #if v.blank?
+            #attrs_to_update.merge!({ k => { :action => "DELETE" } })
+          #else
+            #attrs_to_update.merge!({
+              #k => {
+                #:value => attr_with_type(k,v).values.last,
+                #:action => "PUT"
+              #}
+            #})
+          #end
+        #end
+        #update_item_request = {
+          #:table_name => options[:table_name] || self.table_name,
+          #:key => key_request,
+          #:attribute_updates => attrs_to_update,
+          #:return_consumed_capacity => RETURNED_CONSUMED_CAPACITY[options[:return_consumed_capacity]]
+        #}
+        #@client.update_item(update_item_request)
       else
         # PutItem
         items = {}
         attributes.each_pair do |k,v|
           next if v.blank? # If empty string or nil, skip...
-          items.merge!(attr_with_type(k,v))
+          items.merge!(Table.attr_with_type(k,v))
         end
-        items.merge!(hash_key_item_param(hash_key_value))
         put_item_request = {
-          :table_name => options[:table_name] || self.table_name,
-          :item => items,
-          :return_consumed_capacity => RETURNED_CONSUMED_CAPACITY[options[:return_consumed_capacity]]
+          table_name: @model.dynamo_db_table_name(options[:shard_name]),
+          item: items,
+          return_consumed_capacity: RETURNED_CONSUMED_CAPACITY[options[:return_consumed_capacity]]
         }
-        @client.put_item(put_item_request)
+        @model.dynamo_db_client.put_item(put_item_request)
       end
     end
 

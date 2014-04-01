@@ -108,7 +108,9 @@ module DynaModel
         #table = self.dynamo_db.tables[self.dynamo_db_table_name(shard_name)]
         #table.hash_key = [hash_key, :string]
         #table
-        Table.new(self)
+        #Table.new(self)
+        @table_map ||= {}
+        @table_map[self.dynamo_db_table_name] ||= Table.new(self)
       end
 
       def dynamo_db_table_name shard_name = nil

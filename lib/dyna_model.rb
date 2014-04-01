@@ -4,6 +4,8 @@ require "dyna_model/attributes"
 require "dyna_model/schema"
 require "dyna_model/persistence"
 require "dyna_model/table"
+require "dyna_model/query"
+require "dyna_model/extensions/symbol"
 require "dyna_model/document"
 
 #require "toy/dynamo/adapter"
