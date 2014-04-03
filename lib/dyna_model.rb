@@ -1,3 +1,4 @@
+require "dyna_model/aws/record/attributes/serialized_attr"
 require "dyna_model/version"
 require "dyna_model/config"
 require "dyna_model/attributes"

@@ -8,6 +8,16 @@ module DynaModel
 
     module ClassMethods
 
+      def read_guid(guid, options={})
+        return nil if guid.blank?
+        if self.range_key
+          hash_value, range_value = guid.split(self.guid_delimiter)
+          self.read(hash_value, range_value, options={})
+        else
+          self.read(guid, options={})
+        end
+      end
+
       def read(hash_value, range_value_or_options=nil, options=nil)
         obj = nil
         if self.range_key.nil?

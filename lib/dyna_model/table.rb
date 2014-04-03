@@ -330,7 +330,7 @@ module DynaModel
           raise ArgumentError, "range_key was not provided to the write command" if options[:update_item][:range_value].blank?
           key_request.merge!({
             @primary_range_key[:attribute_name] => {
-              @primary_range_key[:attribute_type] => options[:update_item][:range_key_value].to_s
+              @primary_range_key[:attribute_type] => options[:update_item][:range_value].to_s
             }
           })
         end
@@ -354,7 +354,6 @@ module DynaModel
           attribute_updates: attrs_to_update,
           return_consumed_capacity: RETURNED_CONSUMED_CAPACITY[options[:return_consumed_capacity]]
         }
-        puts update_item_request.inspect
         @model.dynamo_db_client.update_item(update_item_request)
       else
         # PutItem

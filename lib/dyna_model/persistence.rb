@@ -4,20 +4,9 @@ module DynaModel
   module Persistence
     extend ActiveSupport::Concern
 
-    def _guid
-      raise self.inspect
-    end
-
     private
     def populate_id
       #@_id = UUIDTools::UUID.random_create.to_s.downcase
-    end
-
-    private
-    def dynamo_item_key_values
-      key_values = { hash_value: self[self.class.hash_key[:attribute_name]] }
-      key_values.merge!(range_value: self[self.class.range_key[:attribute_name]]) if self.class.range_key
-      key_values
     end
 
     private
@@ -27,7 +16,11 @@ module DynaModel
 
     private
     def create_storage
-      self.class.dynamo_db_table.write(serialize_attributes)
+      run_callbacks :save do
+        run_callbacks :create do
+          self.class.dynamo_db_table.write(serialize_attributes)
+        end
+      end
     end
 
     private
@@ -45,18 +38,24 @@ module DynaModel
         end
       end
 
-      self.class.dynamo_db_table.write(attr_updates, {
-        update_item: dynamo_item_key_values,
-        shard_name: self.shard
-      })
+      run_callbacks :save do
+        run_callbacks :update do
+          self.class.dynamo_db_table.write(attr_updates, {
+            update_item: dynamo_db_item_key_values,
+            shard_name: self.shard
+          })
+        end
+      end
     end
 
     private
     def delete_storage
-      self.class.dynamo_db_table.delete_item(
-        delete_item: dynamo_item_key_values,
-        shard_name: self.shard
-      )
+      run_callbacks :destroy do
+        self.class.dynamo_db_table.delete_item(
+          delete_item: dynamo_db_item_key_values,
+          shard_name: self.shard
+        )
+      end
     end
 
     private

@@ -157,6 +157,10 @@ module DynaModel
       def binary_attr name, options = {}
       end
 
+      def serialized_attr name, options = {}
+        add_attribute(AWS::Record::Attributes::SerializedAttr.new(name, options))
+      end
+
       # A convenience method for adding the standard two datetime attributes
       # `:created_at` and `:updated_at`.
       #

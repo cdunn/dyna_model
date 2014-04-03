@@ -9,10 +9,9 @@ module DynaModel
     extend ActiveSupport::Concern
 
     included do
-      #class_attribute :options, :read_only_attributes, :base_class
-      #self.options = {}
+      class_attribute :read_only_attributes, :base_class
       #self.read_only_attributes = []
-      #self.base_class = self
+      self.base_class = self
 
       AWS::Record.table_prefix = "#{Rails.application.class.parent_name.to_s.underscore.dasherize}-#{Rails.env}-"
 
@@ -40,6 +39,27 @@ module DynaModel
     include DynaModel::Attributes
     include DynaModel::Schema
     include DynaModel::Query
+
+    def dynamo_db_guid
+      _guid = [self.dynamo_db_item_key_values[:hash_value]]
+      _guid << self.dynamo_db_item_key_values[:range_value] if self.dynamo_db_item_key_values[:range_value]
+      _guid.join(self.class.guid_delimiter)
+    end
+
+    def dynamo_db_item_key_values
+      key_values = { hash_value: self[self.class.hash_key[:attribute_name]] }
+      key_values.merge!(range_value: self[self.class.range_key[:attribute_name]]) if self.class.range_key
+      key_values
+    end
+
+    def touch
+      self.send(:touch_timestamps, "updated_at")
+    end
+
+    def touch!
+      self.touch
+      self.save
+    end
 
     module ClassMethods
 
