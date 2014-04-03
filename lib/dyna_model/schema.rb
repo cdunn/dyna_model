@@ -21,7 +21,8 @@ module DynaModel
         AWS::Record::Attributes::FloatAttr => "N",
         AWS::Record::Attributes::BooleanAttr => "S",
         AWS::Record::Attributes::DateTimeAttr => "N",
-        AWS::Record::Attributes::DateAttr => "N"
+        AWS::Record::Attributes::DateAttr => "N",
+        AWS::Record::Attributes::SerializedAttr => "B"
       }
 
       def table_schema
@@ -133,29 +134,6 @@ module DynaModel
         else
           raise "unsupported attribute type #{attr.class}"
         end
-
-        #if type == Array
-          #"S"
-        #elsif type == Boolean
-          #"S"
-        #elsif type == Date
-          #"N"
-        #elsif type == Float
-          #"N"
-        #elsif type == Hash
-          #"S"
-        #elsif type == Integer
-          #"N"
-        #elsif type == Object
-          #"S"
-        #elsif type == Set
-          #"S"
-        #elsif type == String
-          #"S"
-        #elsif type == Time
-          #"N"
-        #elsif type == SimpleUUID::UUID
-          #"S"
       end
 
       def key_schema

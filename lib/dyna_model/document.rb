@@ -15,7 +15,6 @@ module DynaModel
 
       AWS::Record.table_prefix = "#{Rails.application.class.parent_name.to_s.underscore.dasherize}-#{Rails.env}-"
 
-      DynaModel::Config.included_models << self
       extend ActiveModel::Translation
       extend ActiveModel::Callbacks
       extend AWS::Record::AbstractBase
@@ -23,8 +22,6 @@ module DynaModel
 
       define_model_callbacks :create, :save, :destroy, :initialize, :update
 
-      #before_create :set_created_at
-      #before_save :set_updated_at
       #after_initialize :set_type
     end
 

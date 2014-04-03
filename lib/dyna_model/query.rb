@@ -12,9 +12,9 @@ module DynaModel
         return nil if guid.blank?
         if self.range_key
           hash_value, range_value = guid.split(self.guid_delimiter)
-          self.read(hash_value, range_value, options={})
+          self.read(hash_value, range_value, options)
         else
-          self.read(guid, options={})
+          self.read(guid, options)
         end
       end
 
