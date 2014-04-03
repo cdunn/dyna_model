@@ -1,20 +1,23 @@
+# TODO: optimistic locking?
+
 module DynaModel
   module Persistence
     extend ActiveSupport::Concern
 
+    def _guid
+      raise self.inspect
+    end
+
     private
     def populate_id
-      #raise self.class.hash_key.inspect
       #@_id = UUIDTools::UUID.random_create.to_s.downcase
     end
 
     private
-    def dynamo_db_item
-      raise "dynamo_db_item"
-      #dynamo_db_table.items[hash_key]
-      #dynamo_db_table.items.query({
-        #hash_value: hash_key
-      #})
+    def dynamo_item_key_values
+      key_values = { hash_value: self[self.class.hash_key[:attribute_name]] }
+      key_values.merge!(range_value: self[self.class.range_key[:attribute_name]]) if self.class.range_key
+      key_values
     end
 
     private
@@ -31,22 +34,29 @@ module DynaModel
     def update_storage
       # Only enumerating dirty (i.e. changed) attributes.  Empty
       # (nil and empty set) values are deleted, the others are replaced.
-      #dynamo_db_item.attributes.update(opt_lock_conditions) do |u|
-        #changed.each do |attr_name|
-          #attribute = self.class.attribute_for(attr_name)
-          #value = serialize_attribute(attribute, @_data[attr_name])
-          #if value.nil? or value == []
-            #u.delete(attr_name)
-          #else
-            #u.set(attr_name => value)
-          #end
-        #end
-      #end
+      attr_updates = {}
+      changed.each do |attr_name|
+        attribute = self.class.attribute_for(attr_name)
+        value = serialize_attribute(attribute, @_data[attr_name])
+        if value.nil? or value == []
+          attr_updates[attr_name] = nil
+        else
+          attr_updates[attr_name] = value
+        end
+      end
+
+      self.class.dynamo_db_table.write(attr_updates, {
+        update_item: dynamo_item_key_values,
+        shard_name: self.shard
+      })
     end
 
     private
     def delete_storage
-      #dynamo_db_item.delete(opt_lock_conditions)
+      self.class.dynamo_db_table.delete_item(
+        delete_item: dynamo_item_key_values,
+        shard_name: self.shard
+      )
     end
 
     private

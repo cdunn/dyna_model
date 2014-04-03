@@ -39,6 +39,15 @@ module DynaModel
         schema
       end
 
+      def guid_delimiter(val=nil)
+        if val
+          raise(ArgumentError, "Invalid guid_delimiter") if val.blank?
+          @guid_delimiter = val.to_s
+        else
+          @guid_delimiter || DynaModel::Config.default_guid_delimiter
+        end
+      end
+
       def read_provision(val=nil)
         if val
           raise(ArgumentError, "Invalid read provision") unless val.to_i >= 1

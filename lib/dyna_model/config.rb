@@ -19,6 +19,8 @@ module DynaModel
     option :endpoint, :default => 'dynamodb.us-west-2.amazonaws.com'
     option :port, :default => 443
     option :use_ssl, :default => true
+    option :default_guid_delimiter, :default => ":"
+    option :included_models, :default => []
 
     # The default logger: either the Rails logger or just stdout.
     def default_logger

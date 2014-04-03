@@ -1,6 +1,8 @@
 module DynaModel
   class Table
 
+    extend AWS::DynamoDB::Types
+
     attr_reader :table_schema, :client, :schema_loaded_from_dynamo, :hash_key, :range_keys
 
     RETURNED_CONSUMED_CAPACITY = {
@@ -150,15 +152,15 @@ module DynaModel
     def hash_key_item_param(value)
       hash_key = @table_schema[:key_schema].find{|h| h[:key_type] == "HASH"}[:attribute_name]
       hash_key_type = @table_schema[:attribute_definitions].find{|h| h[:attribute_name] == hash_key}[:attribute_type]
-      { hash_key => { hash_key_type => value } }
+      { hash_key => { hash_key_type => value.to_s } }
     end
 
     def hash_key_condition_param(hash_key, value)
       hash_key_type = @table_schema[:attribute_definitions].find{|h| h[:attribute_name] == hash_key}[:attribute_type]
       {
         hash_key => {
-          :attribute_value_list => [hash_key_type => value],
-          :comparison_operator => COMPARISON_OPERATOR[:eq]
+          attribute_value_list: [hash_key_type => value.to_s],
+          comparison_operator: COMPARISON_OPERATOR[:eq]
         }
       }
     end
@@ -175,7 +177,7 @@ module DynaModel
         return_consumed_capacity: RETURNED_CONSUMED_CAPACITY[options[:return_consumed_capacity]]
       }
       get_item_request.merge!( attributes_to_get: [options[:select]].flatten ) unless options[:select].blank?
-      @client.get_item(get_item_request)
+      @model.dynamo_db_client.get_item(get_item_request)
     end
 
     # == options
@@ -184,7 +186,7 @@ module DynaModel
     #    * order
     #    * select
     #    * range
-    def query(hash_key_value, options={})
+    def query(hash_value, options={})
       options[:consistent_read] = false unless options[:consistent_read]
       options[:return_consumed_capacity] ||= :none # "NONE" # || "TOTAL"
       options[:order] ||= :desc
@@ -200,18 +202,18 @@ module DynaModel
         gsi = @table_schema[:global_secondary_indexes].select{ |gsi| gsi[:index_name].to_s == options[:global_secondary_index].to_s}.first
         raise ArgumentError, "Could not find Global Secondary Index '#{options[:global_secondary_index]}'" unless gsi
         gsi_hash_key = gsi[:key_schema].find{|h| h[:key_type] == "HASH"}[:attribute_name]
-        key_conditions.merge!(hash_key_condition_param(gsi_hash_key, hash_key_value))
+        key_conditions.merge!(hash_key_condition_param(gsi_hash_key, hash_value))
       else
         hash_key = @table_schema[:key_schema].find{|h| h[:key_type] == "HASH"}[:attribute_name]
-        key_conditions.merge!(hash_key_condition_param(hash_key, hash_key_value))
+        key_conditions.merge!(hash_key_condition_param(hash_key, hash_value))
       end
 
       query_request = {
-        :table_name => options[:table_name] || self.table_name,
-        :key_conditions => key_conditions,
-        :consistent_read => options[:consistent_read],
-        :return_consumed_capacity => RETURNED_CONSUMED_CAPACITY[options[:return_consumed_capacity]],
-        :scan_index_forward => (options[:order] == :asc)
+        table_name: @model.dynamo_db_table_name(options[:shard_name]),
+        key_conditions: key_conditions,
+        consistent_read: options[:consistent_read],
+        return_consumed_capacity: RETURNED_CONSUMED_CAPACITY[options[:return_consumed_capacity]],
+        scan_index_forward: (options[:order] == :asc)
       }
 
       if options[:range] 
@@ -233,7 +235,7 @@ module DynaModel
         raise ArgumentError, ":range key must be a Range if using the operator BETWEEN" if comparison_operator == "between" && !options[:range].values.first.is_a?(Range)
 
         if range_key.has_key?(:index_name) # Local/Global Secondary Index
-          query_request.merge!(:index_name => range_key[:index_name])
+          query_request.merge!(index_name: range_key[:index_name])
         end
 
         range_value = options[:range].values.first
@@ -256,7 +258,7 @@ module DynaModel
 
       if options[:global_secondary_index] # Override index_name if using GSI
         options[:select] = :projected if options[:select].blank?
-        query_request.merge!(:index_name => gsi[:index_name])
+        query_request.merge!(index_name: gsi[:index_name])
       end
       options[:select] ||= :all # :all, :projected, :count, []
       if options[:select].is_a?(Array)
@@ -264,17 +266,17 @@ module DynaModel
         attrs_to_select << @hash_key[:attribute_name]
         attrs_to_select << @primary_range_key[:attribute_name] if @primary_range_key
         query_request.merge!({
-          :select => QUERY_SELECT[:specific],
-          :attributes_to_get => attrs_to_select.uniq
+          select: QUERY_SELECT[:specific],
+          attributes_to_get: attrs_to_select.uniq
         })
       else
-        query_request.merge!({ :select => QUERY_SELECT[options[:select]] })
+        query_request.merge!({ select: QUERY_SELECT[options[:select]] })
       end
       
-      query_request.merge!({ :limit => options[:limit].to_i }) if options.has_key?(:limit)
-      query_request.merge!({ :exclusive_start_key => options[:exclusive_start_key] }) if options[:exclusive_start_key]
+      query_request.merge!({ limit: options[:limit].to_i }) if options.has_key?(:limit)
+      query_request.merge!({ exclusive_start_key: options[:exclusive_start_key] }) if options[:exclusive_start_key]
 
-      @client.query(query_request)
+      @model.dynamo_db_client.query(query_request)
     end
 
     def batch_get_item(keys, options={})
@@ -303,14 +305,14 @@ module DynaModel
       end
 
       request_items_request = {}
-      request_items_request.merge!( :keys => keys_request )
-      request_items_request.merge!( :attributes_to_get => [options[:select]].flatten ) unless options[:select].blank?
-      request_items_request.merge!( :consistent_read => options[:consistent_read] ) if options[:consistent_read]
+      request_items_request.merge!( keys: keys_request )
+      request_items_request.merge!( attributes_to_get: [options[:select]].flatten ) unless options[:select].blank?
+      request_items_request.merge!( consistent_read: options[:consistent_read] ) if options[:consistent_read]
       batch_get_item_request = {
-        :request_items => { (options[:table_name] || self.table_name) => request_items_request },
-        :return_consumed_capacity => RETURNED_CONSUMED_CAPACITY[options[:return_consumed_capacity]]
+        request_items: { @model.dynamo_db_table_name(options[:shard_name]) => request_items_request },
+        return_consumed_capacity: RETURNED_CONSUMED_CAPACITY[options[:return_consumed_capacity]]
       }
-      @client.batch_get_item(batch_get_item_request)
+      @model.dynamo_db_client.batch_get_item(batch_get_item_request)
     end
 
     def write(attributes, options={})
@@ -318,49 +320,48 @@ module DynaModel
       options[:update_item] = false unless options[:update_item]
 
       if options[:update_item]
-        raise attributes.inspect
         # UpdateItem
-        #key_request = {
-          #@hash_key[:attribute_name] => {
-            #@hash_key[:attribute_type] => hash_key_value.to_s
-          #}
-        #}
-        #if @primary_range_key
-          #range_key_value = attributes[@primary_range_key[:attribute_name]]
-          #raise ArgumentError, "range_key was not provided to the write command" if range_key_value.blank?
-          #key_request.merge!({
-            #@primary_range_key[:attribute_name] => {
-              #@primary_range_key[:attribute_type] => range_key_value.to_s
-            #}
-          #})
-        #end
-        #attrs_to_update = {}
-        #attributes.each_pair do |k,v|
-          #next if @primary_range_key && k == @primary_range_key[:attribute_name]
-          #if v.blank?
-            #attrs_to_update.merge!({ k => { :action => "DELETE" } })
-          #else
-            #attrs_to_update.merge!({
-              #k => {
-                #:value => attr_with_type(k,v).values.last,
-                #:action => "PUT"
-              #}
-            #})
-          #end
-        #end
-        #update_item_request = {
-          #:table_name => options[:table_name] || self.table_name,
-          #:key => key_request,
-          #:attribute_updates => attrs_to_update,
-          #:return_consumed_capacity => RETURNED_CONSUMED_CAPACITY[options[:return_consumed_capacity]]
-        #}
-        #@client.update_item(update_item_request)
+        key_request = {
+          @hash_key[:attribute_name] => {
+            @hash_key[:attribute_type] => options[:update_item][:hash_value].to_s,
+          }
+        }
+        if @primary_range_key
+          raise ArgumentError, "range_key was not provided to the write command" if options[:update_item][:range_value].blank?
+          key_request.merge!({
+            @primary_range_key[:attribute_name] => {
+              @primary_range_key[:attribute_type] => options[:update_item][:range_key_value].to_s
+            }
+          })
+        end
+        attrs_to_update = {}
+        attributes.each_pair do |k,v|
+          next if k == @hash_key[:attribute_name] || (@primary_range_key && k == @primary_range_key[:attribute_name])
+          if v.nil?
+            attrs_to_update.merge!({ k => { :action => "DELETE" } })
+          else
+            attrs_to_update.merge!({
+              k => {
+                value: self.class.attr_with_type(k,v).values.last,
+                action: "PUT"
+              }
+            })
+          end
+        end
+        update_item_request = {
+          table_name: @model.dynamo_db_table_name(options[:shard_name]),
+          key: key_request,
+          attribute_updates: attrs_to_update,
+          return_consumed_capacity: RETURNED_CONSUMED_CAPACITY[options[:return_consumed_capacity]]
+        }
+        puts update_item_request.inspect
+        @model.dynamo_db_client.update_item(update_item_request)
       else
         # PutItem
         items = {}
         attributes.each_pair do |k,v|
           next if v.blank? # If empty string or nil, skip...
-          items.merge!(Table.attr_with_type(k,v))
+          items.merge!(self.class.attr_with_type(k,v))
         end
         put_item_request = {
           table_name: @model.dynamo_db_table_name(options[:shard_name]),
@@ -371,25 +372,26 @@ module DynaModel
       end
     end
 
-    def delete_item(hash_key_value, options={})
+    def delete_item(options={})
+      raise ":delete_item => {...key_values...} required" unless options[:delete_item].present?
       key_request = {
         @hash_key[:attribute_name] => {
-          @hash_key[:attribute_type] => hash_key_value.to_s
+          @hash_key[:attribute_type] => options[:delete_item][:hash_value].to_s
         }
       }
       if @primary_range_key
-        raise ArgumentError, "range_key was not provided to the delete_item command" if options[:range_value].blank?
+        raise ArgumentError, "range_key was not provided to the delete_item command" if options[:delete_item][:range_key_value].blank?
         key_request.merge!({
           @primary_range_key[:attribute_name] => {
-            @primary_range_key[:attribute_type] => options[:range_value].to_s
+            @primary_range_key[:attribute_type] => options[:delete_item][:range_key_value].to_s
           }
         })
       end
       delete_item_request = {
-        :table_name => options[:table_name] || self.table_name,
-        :key => key_request
+        table_name: @model.dynamo_db_table_name(options[:shard_name]),
+        key: key_request
       }
-      @client.delete_item(delete_item_request)
+      @model.dynamo_db_client.delete_item(delete_item_request)
     end
 
     # Perform a table scan
@@ -400,23 +402,23 @@ module DynaModel
       options[:select] ||= :all # :all, :projected, :count, []
 
       scan_request = {
-        :table_name => options[:table_name] || self.table_name,
-        :return_consumed_capacity => RETURNED_CONSUMED_CAPACITY[options[:return_consumed_capacity]]
+        table_name: @model.dynamo_db_table_name(options[:shard_name]),
+        return_consumed_capacity: RETURNED_CONSUMED_CAPACITY[options[:return_consumed_capacity]]
       }
 
-      scan_request.merge!({ :limit => options[:limit].to_i }) if options.has_key?(:limit)
-      scan_request.merge!({ :exclusive_start_key => options[:exclusive_start_key] }) if options[:exclusive_start_key]
+      scan_request.merge!({ limit: options[:limit].to_i }) if options.has_key?(:limit)
+      scan_request.merge!({ exclusive_start_key: options[:exclusive_start_key] }) if options[:exclusive_start_key]
 
       if options[:select].is_a?(Array)
         attrs_to_select = [options[:select].map(&:to_s)].flatten
         attrs_to_select << @hash_key[:attribute_name]
         attrs_to_select << @primary_range_key[:attribute_name] if @primary_range_key
         scan_request.merge!({
-          :select => QUERY_SELECT[:specific],
-          :attributes_to_get => attrs_to_select.uniq
+          select: QUERY_SELECT[:specific],
+          attributes_to_get: attrs_to_select.uniq
         })
       else
-        scan_request.merge!({ :select => QUERY_SELECT[options[:select]] })
+        scan_request.merge!({ select: QUERY_SELECT[options[:select]] })
       end
 
       # :scan_filter => { :name.begins_with => "a" }
@@ -432,28 +434,28 @@ module DynaModel
           attribute_value_list = []
           if comparison_operator == "in"
             v.each do |in_v|
-              attribute_value_list << attr_with_type(key_name, in_v).values.last
+              attribute_value_list << self.classattr_with_type(key_name, in_v).values.last
             end
           elsif comparison_operator == "between"
-            attribute_value_list << attr_with_type(key_name, range_value.min).values.last
-            attribute_value_list << attr_with_type(key_name, range_value.max).values.last
+            attribute_value_list << self.classattr_with_type(key_name, range_value.min).values.last
+            attribute_value_list << self.classattr_with_type(key_name, range_value.max).values.last
           else
-            attribute_value_list << attr_with_type(key_name, v).values.last
+            attribute_value_list << self.classattr_with_type(key_name, v).values.last
           end
           scan_filter.merge!({
             key_name => {
-              :comparison_operator => COMPARISON_OPERATOR[comparison_operator.to_sym],
-              :attribute_value_list => attribute_value_list
+              comparison_operator: COMPARISON_OPERATOR[comparison_operator.to_sym],
+              attribute_value_list: attribute_value_list
             }
           })
         end
-        scan_request.merge!(:scan_filter => scan_filter)
+        scan_request.merge!(scan_filter: scan_filter)
       end
 
-      scan_request.merge!({ :segment => options[:segment].to_i }) if options[:segment].present?
-      scan_request.merge!({ :total_segments => options[:total_segments].to_i }) if options[:total_segments].present?
+      scan_request.merge!({ segment: options[:segment].to_i }) if options[:segment].present?
+      scan_request.merge!({ total_segments: options[:total_segments].to_i }) if options[:total_segments].present?
 
-      @client.scan(scan_request)
+      @model.dynamo_db_client.scan(scan_request)
     end
 
   end

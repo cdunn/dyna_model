@@ -2,6 +2,9 @@ module DynaModel
   module Document
 
     MAX_ITEM_SIZE = 65_536
+    # These delimiters are also reserved characters and should not be used in
+    # hash or range keys
+    GUID_DELIMITER_PRECEDENCE = ["_", ":", "|", ",", "!", "~", "@", "^"]
 
     extend ActiveSupport::Concern
 
@@ -13,7 +16,7 @@ module DynaModel
 
       AWS::Record.table_prefix = "#{Rails.application.class.parent_name.to_s.underscore.dasherize}-#{Rails.env}-"
 
-      #Dynamoid::Config.included_models << self
+      DynaModel::Config.included_models << self
       extend ActiveModel::Translation
       extend ActiveModel::Callbacks
       extend AWS::Record::AbstractBase
@@ -36,35 +39,21 @@ module DynaModel
     
     include DynaModel::Attributes
     include DynaModel::Schema
-
-    #include Dynamoid::Fields
-    #include Dynamoid::Indexes
-    #include Dynamoid::Persistence
-    #include Dynamoid::Finders
-    #include Dynamoid::Associations
-    #include Dynamoid::Criteria
-    #include Dynamoid::Validations
-    #include Dynamoid::IdentityMap
-    #include Dynamoid::Dirty
+    include DynaModel::Query
 
     module ClassMethods
 
       def create_table options = {}
         table_name = self.dynamo_db_table_name(options[:shard_name])
-
         if self.dynamo_db_client.list_tables[:table_names].include?(table_name)
           raise "Table #{table_name} already exists"
         end
-
         self.dynamo_db_client.create_table(self.table_schema.merge({
           table_name: table_name
         }))
-
         while (table_metadata = self.describe_table(options))[:table][:table_status] == "CREATING"
           sleep 1
         end
-
-        #self.load_schema
         table_metadata
       end
 
@@ -103,23 +92,14 @@ module DynaModel
         true
       end
 
-      def dynamo_db_table
-         #shard_name = nil
-        #table = self.dynamo_db.tables[self.dynamo_db_table_name(shard_name)]
-        #table.hash_key = [hash_key, :string]
-        #table
-        #Table.new(self)
+      def dynamo_db_table(shard_name = nil)
         @table_map ||= {}
-        @table_map[self.dynamo_db_table_name] ||= Table.new(self)
+        @table_map[self.dynamo_db_table_name(shard_name)] ||= Table.new(self)
       end
 
-      def dynamo_db_table_name shard_name = nil
+      def dynamo_db_table_name(shard_name = nil)
         "#{AWS::Record.table_prefix}#{self.shard_name(shard_name)}"
       end
-
-      #def dynamo_db
-        #AWS::DynamoDB.new
-      #end
 
       def dynamo_db_client(config={})
         options = {}
