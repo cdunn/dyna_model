@@ -1,29 +1,76 @@
 # DynaModel
 
-TODO: Write a gem description
+AWS DynamoDB ORM for Rails based on AWS::Record in the aws-sdk gem. Still a work in progress but very functional.
 
 ## Installation
+```
+gem 'dyna_model'
+```
 
-Add this line to your application's Gemfile:
+## Sample Model
+```
+class Dude
 
-    gem 'dyna_model'
+  include DynaModel::Document
+  
+  string_attr :hashy
+  integer_attr :ranger, default_value: 2
+  string_attr :name, default_value: lambda { "dude" }
+  boolean_attr :is_dude
+  datetime_attr :born
+  serialized_attr :cereal
+  timestamps
 
-And then execute:
+  hash_key :hashy
+  range_key :ranger
 
-    $ bundle
+  set_shard_name "usery"
 
-Or install it yourself as:
+  local_secondary_index :name
+  global_secondary_index(:name_index, { hash_key: :name, projection: [:name] })
 
-    $ gem install dyna_model
+  read_provision 4
+  write_provision 4
+  guid_delimiter "!"
 
-## Usage
+  validates_presence_of :name
 
-TODO: Write usage instructions here
+end
+```
 
-## Contributing
+## Sample Methods
+```
+# Read a single object by Hash and (optionally) Range keys
+Dude.read
 
-1. Fork it ( http://github.com/<my-github-username>/dyna_model/fork )
-2. Create your feature branch (`git checkout -b my-new-feature`)
-3. Commit your changes (`git commit -am 'Add some feature'`)
-4. Push to the branch (`git push origin my-new-feature`)
-5. Create new Pull Request
+# Query by Hash and (optionally) Range keys (compatible with Local and Global Secondary Indexes)
+Dude.read_range
+
+# Batch read
+Dude.read_multiple
+
+# Read by guid (helper for hash + guid_delimiter + range)
+Dude.read_guid
+
+# Get count of query
+Dude.count_range
+
+# Table scan with more complex filters
+Dude.scan
+
+# Create Table
+Dude.create_table
+
+# Delete Table
+Dude.delete_table
+
+# Rake tasks
+rake ddb:create CLASS=Dude
+rake ddb:create CLASS=all
+rake ddb:destroy CLASS=Dude
+rake ddb:destroy CLASS=all
+```
+
+# AWS::Record
+* http://docs.aws.amazon.com/AWSRubySDK/latest/AWS/Record.html
+* https://github.com/aws/aws-sdk-ruby/blob/master/lib/aws/record/abstract_base.rb
