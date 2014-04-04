@@ -84,8 +84,8 @@ module DynaModel
         key_attr = @table_schema[:attribute_definitions].find{|h| h[:attribute_name] == key[:attribute_name]}
         next if key_attr.nil?
         key_schema_attr = {
-          :attribute_name => key[:attribute_name],
-          :attribute_type => key_attr[:attribute_type]
+          attribute_name: key[:attribute_name],
+          attribute_type: key_attr[:attribute_type]
         }
 
         if key[:key_type] == "HASH"
@@ -103,9 +103,9 @@ module DynaModel
           si_range_attribute = @table_schema[:attribute_definitions].find{|h| h[:attribute_name] == si_range_key[:attribute_name]}
           next if si_range_attribute.nil?
           (@range_keys ||= []) << {
-            :attribute_name => si_range_key[:attribute_name],
-            :attribute_type => si_range_attribute[:attribute_type],
-            :index_name => key[:index_name]
+            attribute_name: si_range_key[:attribute_name],
+            attribute_type: si_range_attribute[:attribute_type],
+            index_name: key[:index_name]
           }
         end
       end
@@ -198,7 +198,6 @@ module DynaModel
       key_conditions = {}
       gsi = nil
       if options[:global_secondary_index]
-        # TODO
         gsi = @table_schema[:global_secondary_indexes].select{ |gsi| gsi[:index_name].to_s == options[:global_secondary_index].to_s}.first
         raise ArgumentError, "Could not find Global Secondary Index '#{options[:global_secondary_index]}'" unless gsi
         gsi_hash_key = gsi[:key_schema].find{|h| h[:key_type] == "HASH"}[:attribute_name]
@@ -217,25 +216,16 @@ module DynaModel
       }
 
       if options[:range] 
-        raise ArgumentError, "Expected a 1 element Hash for :range (ex {:age.gt => 13})" unless options[:range].is_a?(Hash) && options[:range].keys.size == 1 && options[:range].keys.first.is_a?(String)
+        raise ArgumentError, "Expected a 2 element Hash for :range (ex {:age.gt => 13})" unless options[:range].is_a?(Hash) && options[:range].keys.size == 1 && options[:range].keys.first.is_a?(String)
         range_key_name, comparison_operator = options[:range].keys.first.split(".")
         raise ArgumentError, "Comparison operator must be one of (#{(COMPARISON_OPERATOR.keys - COMPARISON_OPERATOR_SCAN_ONLY).join(", ")})" unless COMPARISON_OPERATOR.keys.include?(comparison_operator.to_sym)
-        range_key = nil
-        #[{:attribute_name=>"health_check_guid", :attribute_type=>"S", :primary_range_key=>true}]
-        #raise @range_keys.inspect
-        #if options[:global_secondary_index]
-          #raise @table_schema.inspect
-          #hash_key_type = @table_schema[:attribute_definitions].find{|h| h[:attribute_name] == hash_key}[:attribute_type]
-          #raise gsi[:key_schema].inspect
-          ##range_key = gsi.find{|k| k[:attribute_name] == range_key_name}
-        #else
-          range_key = @range_keys.find{|k| k[:attribute_name] == range_key_name}
-        #end
+        range_key = @range_keys.find{|k| k[:attribute_name] == range_key_name}
         raise ArgumentError, ":range key must be a valid Range attribute" unless range_key
         raise ArgumentError, ":range key must be a Range if using the operator BETWEEN" if comparison_operator == "between" && !options[:range].values.first.is_a?(Range)
 
         if range_key.has_key?(:index_name) # Local/Global Secondary Index
-          query_request.merge!(index_name: range_key[:index_name])
+          options[:index_name] = range_key[:index_name]
+          query_request[:index_name] = range_key[:index_name]
         end
 
         range_value = options[:range].values.first
@@ -250,14 +240,16 @@ module DynaModel
 
         key_conditions.merge!({
           range_key[:attribute_name] => {
-            :attribute_value_list => range_attribute_list,
-            :comparison_operator => COMPARISON_OPERATOR[comparison_operator.to_sym]
+            attribute_value_list: range_attribute_list,
+            comparison_operator: COMPARISON_OPERATOR[comparison_operator.to_sym]
           }
         })
       end
 
       if options[:global_secondary_index] # Override index_name if using GSI
-        options[:select] = :projected if options[:select].blank?
+        # You can only select projected attributes from a GSI
+        options[:select] = :projected #if options[:select].blank?
+        options[:index_name] = gsi[:index_name]
         query_request.merge!(index_name: gsi[:index_name])
       end
       options[:select] ||= :all # :all, :projected, :count, []

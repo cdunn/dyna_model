@@ -19,13 +19,10 @@ module DynaModel
       end
 
       def read(hash_value, range_value_or_options=nil, options=nil)
-        obj = nil
         if self.range_key.nil?
           item_attrs = self.dynamo_db_table.get_item(hash_value, range_value_or_options || {})[:item]
-          obj = self.new(shard: self.shard_name((range_value_or_options || {})[:shard_name]))
           return nil if item_attrs.nil?
-          obj.send(:hydrate, nil, Table.values_from_response_hash(item_attrs))
-          obj
+          self.obj_from_attrs(Table.values_from_response_hash(item_attrs), (range_value_or_options || {}))
         else
           raise ArgumentError, "This table requires a range_key_value" if range_value_or_options.nil?
           self.read_range(hash_value, (options || {}).merge(range: { self.range_key[:attribute_name].to_sym.eq => range_value_or_options})).first
@@ -37,8 +34,7 @@ module DynaModel
         results = self.dynamo_db_table.batch_get_item(keys, options)
         results[:responses][self.dynamo_db_table_name(options[:shard_name])].each do |result|
           attrs = Response.strip_attr_types(result)
-          obj = self.new(shard: self.shard_name(options[:shard_name]))
-          obj.send(:hydrate, nil, attrs)
+          obj = self.obj_from_attrs(attrs, options)
           if self.dynamo_db_table.range_keys.present? && primary_range_key = self.dynamo_db_table.range_keys.find{|rk| rk[:primary_range_key] }
             (results_map[attrs[self.dynamo_db_table.hash_key[:attribute_name]]] ||= {})[attrs[primary_range_key[:attribute_name]]] = obj
           else
@@ -69,9 +65,7 @@ module DynaModel
 
         results[:member].each do |result|
           attrs = Response.strip_attr_types(result)
-          obj = self.new(shard: self.shard_name(options[:shard_name]))
-          obj.send(:hydrate, nil, attrs)
-          aggregated_results << obj
+          aggregated_results << self.obj_from_attrs(attrs, options)
         end
 
         if response.more_results?
@@ -90,9 +84,7 @@ module DynaModel
               response = Response.new(results)
               results[:member].each do |result|
                 attrs = Response.strip_attr_types(result)
-                obj = self.new(shard: self.shard_name(options[:shard_name]))
-                obj.send(:hydrate, nil, attrs)
-                aggregated_results << obj
+                aggregated_results << self.obj_from_attrs(attrs, options)
               end
               results_returned += response.count
               batch_iteration += 1
@@ -135,9 +127,7 @@ module DynaModel
 
         results[:member].each do |result|
           attrs = Response.strip_attr_types(result)
-          obj = self.new(shard: self.shard_name(options[:shard_name]))
-          obj.send(:hydrate, nil, attrs)
-          aggregated_results << obj
+          aggregated_results << self.obj_from_attrs(attrs, options)
         end
 
         if response.more_results? && !options[:manual_batching]
@@ -156,9 +146,7 @@ module DynaModel
               response = Response.new(results)
               results[:member].each do |result|
                 attrs = Response.strip_attr_types(result)
-                obj = self.new(shard: self.shard_name(options[:shard_name]))
-                obj.send(:hydrate, nil, attrs)
-                aggregated_results << obj
+                aggregated_results << self.obj_from_attrs(attrs, options)
               end
               results_returned += response.count
               batch_iteration += 1
@@ -177,6 +165,41 @@ module DynaModel
           aggregated_results
         end
       end # scan
+
+      protected
+      def obj_from_attrs(attrs, options={})
+        obj = self.new(shard: self.shard_name(options[:shard_name]))
+        obj.send(:hydrate, nil, attrs)
+        if options[:select]
+          obj.instance_variable_set("@_select", options[:select])
+          if options[:select] != :all
+            #:all, :projected, :count, :specific
+            selected_attrs = []
+            if options[:select] == :projected
+              index = (self.table_schema[:global_secondary_indexes] + self.table_schema[:local_secondary_indexes]).find { |i| i[:index_name] == options[:index_name].to_s }
+              raise "Index '#{options[:index_name]}' not found in table schema" unless index
+              index[:key_schema].each do |k|
+                selected_attrs << k[:attribute_name].to_s
+              end
+              if index[:projection] && index[:projection][:non_key_attributes]
+                index[:projection][:non_key_attributes].each do |a|
+                  selected_attrs << a.to_s
+                end
+              end
+            elsif options[:select].is_a?(Array)
+              obj.instance_variable_set("@_select", :specific)
+              # Only LSI/native
+              self.table_schema[:key_schema].each do |k|
+                selected_attrs << k[:attribute_name]
+              end
+              selected_attrs += options[:select].map(&:to_s)
+            end
+            selected_attrs.uniq!
+            obj.instance_variable_set("@_selected_attributes", selected_attrs.compact)
+          end
+        end
+        obj
+      end
 
     end # ClassMethods
 

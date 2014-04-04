@@ -22,6 +22,17 @@ module DynaModel
 
       define_model_callbacks :create, :save, :destroy, :initialize, :update
 
+      # override AWS::Record::AbstractBase for :select attributes
+      protected
+      def [] attribute_name
+        # Warn if using attributes that were not part of the :select (common with GSI/LSI projections)
+        #   we do not want to give the impression they are nil
+        if (selected_attrs = self.instance_variable_get("@_selected_attributes"))
+          raise "Attribute '#{attribute_name}' was not part of the select '#{self.instance_variable_get("@_select")}' (available attributes: #{selected_attrs})" unless selected_attrs.include?(attribute_name)
+        end
+        super
+      end
+
       #after_initialize :set_type
     end
 
@@ -47,6 +58,22 @@ module DynaModel
       key_values = { hash_value: self[self.class.hash_key[:attribute_name]] }
       key_values.merge!(range_value: self[self.class.range_key[:attribute_name]]) if self.class.range_key
       key_values
+    end
+
+    # When only partial attributes were selected (via GSI or projected attributes on an index)
+    def load_attributes!
+      raise "All attributes already loaded!" if self.instance_variable_get("@_select") == :all
+      options = { shard_name: self.shard }
+      if self.class.range_key
+        obj = self.class.read(dynamo_db_item_key_values[:hash_value], dynamo_db_item_key_values[:range_value], options)
+      else
+        obj = self.class.read(dynamo_db_item_key_values[:hash_value], options)
+      end
+      raise "Could not find object" unless obj
+      self.instance_variable_set("@_select", :all)
+      self.remove_instance_variable("@_selected_attributes")
+      self.instance_variable_set("@_data", obj.instance_variable_get("@_data"))
+      self
     end
 
     def touch
