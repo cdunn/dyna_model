@@ -1,3 +1,8 @@
+require "aws-sdk"
+require "rails"
+require "active_support"
+require 'active_support/concern'
+require 'active_model'
 require "dyna_model/aws/record/attributes/serialized_attr"
 require "dyna_model/version"
 require "dyna_model/config"

@@ -13,7 +13,7 @@ module DynaModel
       #self.read_only_attributes = []
       self.base_class = self
 
-      AWS::Record.table_prefix = "#{Rails.application.class.parent_name.to_s.underscore.dasherize}-#{Rails.env}-"
+      AWS::Record.table_prefix = "#{DynaModel::Config.namespace}#{Rails.application.class.parent_name.to_s.underscore.dasherize}-#{Rails.env}-"
 
       extend ActiveModel::Translation
       extend ActiveModel::Callbacks
@@ -32,8 +32,6 @@ module DynaModel
         end
         super
       end
-
-      #after_initialize :set_type
     end
 
     #include ActiveModel::AttributeMethods
@@ -90,7 +88,8 @@ module DynaModel
       def create_table options = {}
         table_name = self.dynamo_db_table_name(options[:shard_name])
         if self.dynamo_db_client.list_tables[:table_names].include?(table_name)
-          raise "Table #{table_name} already exists"
+          puts "Table #{table_name} already exists"
+          return false
         end
         self.dynamo_db_client.create_table(self.table_schema.merge({
           table_name: table_name
