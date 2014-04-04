@@ -371,10 +371,10 @@ module DynaModel
         }
       }
       if @primary_range_key
-        raise ArgumentError, "range_key was not provided to the delete_item command" if options[:delete_item][:range_key_value].blank?
+        raise ArgumentError, "range_key was not provided to the delete_item command" if options[:delete_item][:range_value].blank?
         key_request.merge!({
           @primary_range_key[:attribute_name] => {
-            @primary_range_key[:attribute_type] => options[:delete_item][:range_key_value].to_s
+            @primary_range_key[:attribute_type] => options[:delete_item][:range_value].to_s
           }
         })
       end
@@ -425,13 +425,13 @@ module DynaModel
           attribute_value_list = []
           if comparison_operator == "in"
             v.each do |in_v|
-              attribute_value_list << self.classattr_with_type(key_name, in_v).values.last
+              attribute_value_list << self.class.attr_with_type(key_name, in_v).values.last
             end
           elsif comparison_operator == "between"
-            attribute_value_list << self.classattr_with_type(key_name, range_value.min).values.last
-            attribute_value_list << self.classattr_with_type(key_name, range_value.max).values.last
+            attribute_value_list << self.class.attr_with_type(key_name, v.min).values.last
+            attribute_value_list << self.class.attr_with_type(key_name, v.max).values.last
           else
-            attribute_value_list << self.classattr_with_type(key_name, v).values.last
+            attribute_value_list << self.class.attr_with_type(key_name, v).values.last
           end
           scan_filter.merge!({
             key_name => {

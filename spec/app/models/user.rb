@@ -3,9 +3,12 @@ class User
   include DynaModel::Document
   
   string_attr :hashy
-  integer_attr :ranger
+  integer_attr :ranger, default_value: 2
+  string_attr :name, default_value: lambda { "dude" }
+  integer_attr :intous
+  boolean_attr :is_dude
+  datetime_attr :born
   serialized_attr :cereal
-  string_attr :name
   timestamps
 
   hash_key :hashy
