@@ -19,8 +19,9 @@ module DynaModel
       extend ActiveModel::Callbacks
       extend AWS::Record::AbstractBase
       include DynaModel::Persistence
+      include DynaModel::Validations
 
-      define_model_callbacks :create, :save, :destroy, :initialize, :update
+      define_model_callbacks :create, :save, :destroy, :initialize, :update, :validation_on_create, :validation_on_save, :validation_on_update
 
       # override AWS::Record::AbstractBase for :select attributes
       protected
@@ -31,6 +32,24 @@ module DynaModel
           raise "Attribute '#{attribute_name}' was not part of the select '#{self.instance_variable_get("@_select")}' (available attributes: #{selected_attrs})" unless selected_attrs.include?(attribute_name)
         end
         super
+      end
+
+      # override AWS::Record::AbstractBase to add validation callbacks
+      public
+      def save opts = {}
+        _valid = false
+        run_callbacks "validation_on_#{persisted? ? "update" : "create"}".to_sym do
+          run_callbacks :validation_on_save do
+            _valid = valid?(opts)
+          end
+        end
+        if _valid
+          persisted? ? update : create
+          clear_changes!
+          true
+        else
+          false
+        end
       end
     end
 

@@ -23,4 +23,6 @@ class User
   write_provision 4
   guid_delimiter "!"
 
+  validates_presence_of :name
+
 end
