@@ -175,8 +175,12 @@ module DynaModel
           if options[:select] != :all
             #:all, :projected, :count, :specific
             selected_attrs = []
+            # Primary hash/range key are always returned...
+            self.table_schema[:key_schema].each do |k|
+              selected_attrs << k[:attribute_name]
+            end
             if options[:select] == :projected
-              index = (self.table_schema[:global_secondary_indexes] + self.table_schema[:local_secondary_indexes]).find { |i| i[:index_name] == options[:index_name].to_s }
+              index = ((self.table_schema[:global_secondary_indexes] || []) + (self.table_schema[:local_secondary_indexes] || [])).find { |i| i[:index_name] == options[:index_name].to_s }
               raise "Index '#{options[:index_name]}' not found in table schema" unless index
               index[:key_schema].each do |k|
                 selected_attrs << k[:attribute_name].to_s
@@ -188,10 +192,6 @@ module DynaModel
               end
             elsif options[:select].is_a?(Array)
               obj.instance_variable_set("@_select", :specific)
-              # Only LSI/native
-              self.table_schema[:key_schema].each do |k|
-                selected_attrs << k[:attribute_name]
-              end
               selected_attrs += options[:select].map(&:to_s)
             end
             selected_attrs.uniq!

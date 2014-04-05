@@ -47,6 +47,10 @@ module DynaModel
     include DynaModel::Schema
     include DynaModel::Query
 
+    def to_param
+      self.dynamo_db_guid
+    end
+
     def dynamo_db_guid
       _guid = [self.dynamo_db_item_key_values[:hash_value]]
       _guid << self.dynamo_db_item_key_values[:range_value] if self.dynamo_db_item_key_values[:range_value]
