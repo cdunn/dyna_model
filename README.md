@@ -34,6 +34,11 @@ class Dude
   guid_delimiter "!"
 
   validates_presence_of :name
+  
+  before_create :do_something
+  before_validation on: :create do
+    do_something
+  end
 
 end
 ```
