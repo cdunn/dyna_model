@@ -9,8 +9,10 @@ module DynaModel
         validation_context = nil
         if options.is_a?(Hash) && %w(create update).include?(options[:on].to_s)
           validation_context = options[:on].to_s
+        else
+          validation_context = "save"
         end
-        self.send("before_validation#{"_on_#{validation_context}" if validation_context}", *args, &block)
+        self.send("before_validation_on_#{validation_context}", *args, &block)
       end
 
       def after_validation(*args, &block)
@@ -18,8 +20,10 @@ module DynaModel
         validation_context = nil
         if options.is_a?(Hash) && %w(create update).include?(options[:on].to_s)
           validation_context = options[:on].to_s
+        else
+          validation_context = "save"
         end
-        self.send("after_validation#{"_on_#{validation_context}" if validation_context}", *args, &block)
+        self.send("after_validation_on_#{validation_context}", *args, &block)
       end
 
     end
