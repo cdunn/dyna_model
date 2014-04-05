@@ -10,7 +10,6 @@ module DynaModel
 
     included do
       class_attribute :read_only_attributes, :base_class
-      #self.read_only_attributes = []
       self.base_class = self
 
       AWS::Record.table_prefix = "#{DynaModel::Config.namespace}#{Rails.application.class.parent_name.to_s.underscore.dasherize}-#{Rails.env}-"
@@ -21,9 +20,11 @@ module DynaModel
       include DynaModel::Persistence
       include DynaModel::Validations
 
-      define_model_callbacks :create, :save, :destroy, :initialize, :update, :validation_on_create, :validation_on_save, :validation_on_update
+      define_model_callbacks :create, :save, :destroy, :initialize, :update, :validation
 
-      # override AWS::Record::AbstractBase for :select attributes
+      # OVERRIDE
+      # https://github.com/aws/aws-sdk-ruby/blob/master/lib/aws/record/abstract_base.rb#L258
+      # AWS::Record::AbstractBase for :select attributes
       protected
       def [] attribute_name
         # Warn if using attributes that were not part of the :select (common with GSI/LSI projections)
@@ -33,27 +34,8 @@ module DynaModel
         end
         super
       end
-
-      # override AWS::Record::AbstractBase to add validation callbacks
-      public
-      def save opts = {}
-        _valid = false
-        run_callbacks "validation_on_#{persisted? ? "update" : "create"}".to_sym do
-          run_callbacks :validation_on_save do
-            _valid = valid?(opts)
-          end
-        end
-        if _valid
-          persisted? ? update : create
-          clear_changes!
-          true
-        else
-          false
-        end
-      end
     end
 
-    #include ActiveModel::AttributeMethods
     include ActiveModel::Conversion
     include ActiveModel::MassAssignmentSecurity if defined?(ActiveModel::MassAssignmentSecurity)
     include ActiveModel::Naming
@@ -75,6 +57,10 @@ module DynaModel
       key_values = { hash_value: self[self.class.hash_key[:attribute_name]] }
       key_values.merge!(range_value: self[self.class.range_key[:attribute_name]]) if self.class.range_key
       key_values
+    end
+
+    def all_attributes_loaded?
+      self.instance_variable_get("@_select") == :all
     end
 
     # When only partial attributes were selected (via GSI or projected attributes on an index)

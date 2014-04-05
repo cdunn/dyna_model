@@ -1,32 +1,33 @@
-module DynaModel
-  module Validations
-    extend ActiveSupport::Concern
+module AWS
+  module Record
+    module AbstractBase
 
-    module ClassMethods
+      # OVERRIDE
+      # https://github.com/aws/aws-sdk-ruby/blob/master/lib/aws/record/abstract_base.rb#L20
+      # Disable aws-sdk validations in favor of ActiveModel::Validations
+      def self.extended base
+        base.send(:extend, ClassMethods)
+        base.send(:include, InstanceMethods)
+        base.send(:include, DirtyTracking)
+        #base.send(:extend, Validations)
 
-      def before_validation(*args, &block)
-        options = args.last
-        validation_context = nil
-        if options.is_a?(Hash) && %w(create update).include?(options[:on].to_s)
-          validation_context = options[:on].to_s
-        else
-          validation_context = "save"
-        end
-        self.send("before_validation_on_#{validation_context}", *args, &block)
-      end
-
-      def after_validation(*args, &block)
-        options = args.last
-        validation_context = nil
-        if options.is_a?(Hash) && %w(create update).include?(options[:on].to_s)
-          validation_context = options[:on].to_s
-        else
-          validation_context = "save"
-        end
-        self.send("after_validation_on_#{validation_context}", *args, &block)
+        # these 3 modules are for rails 3+ active model compatability
+        base.send(:extend, Naming)
+        base.send(:include, Naming)
+        base.send(:include, Conversion)
       end
 
     end
+  end
+end
 
+module DynaModel
+  module Validations
+    extend ActiveSupport::Concern
+    include ActiveModel::Validations
+    include ActiveModel::Validations::Callbacks
+
+    module ClassMethods
+    end
   end
 end
