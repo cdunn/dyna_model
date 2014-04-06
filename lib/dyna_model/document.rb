@@ -45,6 +45,17 @@ module DynaModel
           hash.merge(attr_name => __send__(attr_name))
         end
       end
+
+      # OVERRIDE
+      # https://github.com/aws/aws-sdk-ruby/blob/master/lib/aws/record/abstract_base.rb#L273
+      # AWS::Record::AbstractBase to trigger update even without changes (for callbacks etc)
+      private
+      def update
+        #return unless changed?
+        touch_timestamps('updated_at')
+        increment_optimistic_lock_value
+        update_storage
+      end
     end
 
     include ActiveModel::Conversion
