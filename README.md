@@ -86,6 +86,15 @@ class Item
 end
 ```
 
-# AWS::Record
+## CarrierWave compatible adapter
+```
+require "dyna_model/adapters/carrierwave/dyna_model"
+class Item
+  include DynaModel::Document
+  mount_uploader :favicon, FaviconUploader
+end
+```
+
+## AWS::Record
 * http://docs.aws.amazon.com/AWSRubySDK/latest/AWS/Record.html
 * https://github.com/aws/aws-sdk-ruby/blob/master/lib/aws/record/abstract_base.rb
