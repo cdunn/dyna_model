@@ -99,7 +99,7 @@ describe "DynaModel::Query" do
     multi[@cacher2.key].should_not be_nil
     @user = User.create(@user_attrs)
     @user2 = User.create(@user2_attrs)
-    multi = User.read_multiple([{hash_value: @user.hashy, range_value: @user.ranger}, {hash_value: @user2.hashy, range_value: @user2.ranger}])
+    multi = User.read_multiple([@user.dynamo_db_guid, @user2.dynamo_db_guid])
     multi[@user.hashy].should_not be_nil
     multi[@user.hashy][@user.ranger.to_s].should_not be_nil
     multi[@user2.hashy].should_not be_nil

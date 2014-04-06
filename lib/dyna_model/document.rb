@@ -34,6 +34,17 @@ module DynaModel
         end
         super
       end
+
+      # OVERRIDE
+      # https://github.com/aws/aws-sdk-ruby/blob/master/lib/aws/record/abstract_base.rb#L76
+      # AWS::Record::AbstractBase for :select attributes
+      public
+      def attributes
+        attributes = AWS::Core::IndifferentHash.new
+        (self.instance_variable_get("@_selected_attributes") || self.class.attributes.keys).inject(attributes) do |hash,attr_name|
+          hash.merge(attr_name => __send__(attr_name))
+        end
+      end
     end
 
     include ActiveModel::Conversion
@@ -46,6 +57,10 @@ module DynaModel
     include DynaModel::Attributes
     include DynaModel::Schema
     include DynaModel::Query
+
+    def id
+      self.dynamo_db_guid
+    end
 
     def to_param
       self.dynamo_db_guid
@@ -64,7 +79,7 @@ module DynaModel
     end
 
     def all_attributes_loaded?
-      self.instance_variable_get("@_select") == :all
+      self.instance_variable_get("@_select").nil? && self.instance_variable_get("@_select") == :all
     end
 
     # When only partial attributes were selected (via GSI or projected attributes on an index)

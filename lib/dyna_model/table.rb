@@ -281,16 +281,13 @@ module DynaModel
       keys.each do |k|
         key_request = {}
         if @primary_range_key
-          hash_value = k[:hash_value]
+          hash_value, range_value = k.split(@model.guid_delimiter)
         else
-          raise ArgumentError, "expected keys to be in the form of ['hash key here'] for table with no range keys" if hash_value.is_a?(Hash)
           hash_value = k
         end
-        raise ArgumentError, "every key must include a :hash_value" if hash_value.blank?
         key_request[@hash_key[:attribute_name]] = { @hash_key[:attribute_type] => hash_value.to_s }
         if @primary_range_key
-          range_value = k[:range_value]
-          raise ArgumentError, "every key must include a :range_value" if range_value.blank?
+          raise ArgumentError, "every key must include a range_value" if range_value.blank?
           key_request[@primary_range_key[:attribute_name]] = { @primary_range_key[:attribute_type] => range_value.to_s }
         end
         keys_request << key_request

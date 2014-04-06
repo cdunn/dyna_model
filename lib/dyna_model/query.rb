@@ -30,18 +30,26 @@ module DynaModel
       end
 
       def read_multiple(keys, options={})
+        options[:format] = (options[:format] && options[:format] == :array) ? :array : :hash
         results_map = {}
-        results = self.dynamo_db_table.batch_get_item(keys, options)
-        results[:responses][self.dynamo_db_table_name(options[:shard_name])].each do |result|
-          attrs = Response.strip_attr_types(result)
-          obj = self.obj_from_attrs(attrs, options)
-          if self.dynamo_db_table.range_keys.present? && primary_range_key = self.dynamo_db_table.range_keys.find{|rk| rk[:primary_range_key] }
-            (results_map[attrs[self.dynamo_db_table.hash_key[:attribute_name]]] ||= {})[attrs[primary_range_key[:attribute_name]]] = obj
-          else
-            results_map[attrs[self.dynamo_db_table.hash_key[:attribute_name]]] = obj
+        results_arr = []
+        if keys.present?
+          results = self.dynamo_db_table.batch_get_item(keys, options)
+          results[:responses][self.dynamo_db_table_name(options[:shard_name])].each do |result|
+            attrs = Response.strip_attr_types(result)
+            obj = self.obj_from_attrs(attrs, options)
+            if options[:format] == :array
+              results_arr << obj
+            else
+              if self.dynamo_db_table.range_keys.present? && primary_range_key = self.dynamo_db_table.range_keys.find{|rk| rk[:primary_range_key] }
+                (results_map[attrs[self.dynamo_db_table.hash_key[:attribute_name]]] ||= {})[attrs[primary_range_key[:attribute_name]]] = obj
+              else
+                results_map[attrs[self.dynamo_db_table.hash_key[:attribute_name]]] = obj
+              end
+            end
           end
         end
-        results_map
+        options[:format] == :array ? results_arr : results_map
       end
 
       # Read results up to the limit

@@ -76,6 +76,16 @@ rake ddb:destroy CLASS=Dude
 rake ddb:destroy CLASS=all
 ```
 
+## Elasticsearch::Model compatible adapter
+```
+require 'dyna_model/adapters/elasticsearch/dyna_model_adapter'
+class Item
+  include DynaModel::Document
+  include Elasticsearch::Model
+  include Elasticsearch::Model::Callbacks
+end
+```
+
 # AWS::Record
 * http://docs.aws.amazon.com/AWSRubySDK/latest/AWS/Record.html
 * https://github.com/aws/aws-sdk-ruby/blob/master/lib/aws/record/abstract_base.rb
