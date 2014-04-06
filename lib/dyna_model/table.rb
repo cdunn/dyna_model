@@ -278,7 +278,7 @@ module DynaModel
 
     def batch_get_item(keys, options={})
       options[:return_consumed_capacity] ||= :none
-      options[:select] ||= []
+      options[:select] ||= [] # no :projected option, always an array or :all
       options[:consistent_read] = false unless options[:consistent_read]
 
       raise ArgumentError, "must include between 1 - 100 keys" if keys.size == 0 || keys.size > 100
@@ -300,7 +300,11 @@ module DynaModel
 
       request_items_request = {}
       request_items_request.merge!( keys: keys_request )
-      request_items_request.merge!( attributes_to_get: [options[:select]].flatten ) unless options[:select].blank?
+      if options[:select].blank?
+        options[:select] = :all # for obj_from_attrs
+      else
+        request_items_request.merge!( attributes_to_get: [options[:select]].flatten )
+      end
       request_items_request.merge!( consistent_read: options[:consistent_read] ) if options[:consistent_read]
       batch_get_item_request = {
         request_items: { @model.dynamo_db_table_name(options[:shard_name]) => request_items_request },
