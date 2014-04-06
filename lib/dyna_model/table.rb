@@ -168,7 +168,8 @@ module DynaModel
     def get_item(hash_key, options={})
       options[:consistent_read] = false unless options[:consistent_read]
       options[:return_consumed_capacity] ||= :none # "NONE" # || "TOTAL"
-      options[:select] ||= []
+      options[:select] ||= [] # no :projected option, always an array or :all
+      raise ArgumentError, "Invalid :select. GetItem :select must be an Array (blank for :all)" unless options[:select].is_a?(Array)
 
       get_item_request = {
         table_name: @model.dynamo_db_table_name(options[:shard_name]),
@@ -176,7 +177,11 @@ module DynaModel
         consistent_read: options[:consistent_read],
         return_consumed_capacity: RETURNED_CONSUMED_CAPACITY[options[:return_consumed_capacity]]
       }
-      get_item_request.merge!( attributes_to_get: [options[:select]].flatten ) unless options[:select].blank?
+      if options[:select].blank?
+        options[:select] = :all # for obj_from_attrs
+      else
+        get_item_request.merge!( attributes_to_get: [options[:select]].flatten )
+      end
       @model.dynamo_db_client.get_item(get_item_request)
     end
 
