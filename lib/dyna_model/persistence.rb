@@ -27,19 +27,19 @@ module DynaModel
     def update_storage
       # Only enumerating dirty (i.e. changed) attributes.  Empty
       # (nil and empty set) values are deleted, the others are replaced.
-      attr_updates = {}
-      changed.each do |attr_name|
-        attribute = self.class.attribute_for(attr_name)
-        value = serialize_attribute(attribute, @_data[attr_name])
-        if value.nil? or value == []
-          attr_updates[attr_name] = nil
-        else
-          attr_updates[attr_name] = value
-        end
-      end
-
       run_callbacks :save do
         run_callbacks :update do
+          attr_updates = {}
+          changed.each do |attr_name|
+            attribute = self.class.attribute_for(attr_name)
+            value = serialize_attribute(attribute, @_data[attr_name])
+            if value.nil? or value == []
+              attr_updates[attr_name] = nil
+            else
+              attr_updates[attr_name] = value
+            end
+          end
+
           self.class.dynamo_db_table.write(attr_updates, {
             update_item: dynamo_db_item_key_values,
             shard_name: self.shard

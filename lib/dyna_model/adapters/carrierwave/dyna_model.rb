@@ -6,7 +6,7 @@ module CarrierWave
     include CarrierWave::Mount
 
     def mount_uploader(column, uploader, options={}, &block)
-      options[:mount_on] ||= "#{column}_filename"
+      options[:mount_on] ||= "#{column}_identifier"
       string_attr options[:mount_on].to_sym
 
       super
@@ -24,7 +24,9 @@ module CarrierWave
       after_save "store_#{column}!".to_sym
       before_save "write_#{column}_identifier".to_sym
       after_destroy "remove_#{column}!".to_sym
+
     end
+
   end
 end
 
