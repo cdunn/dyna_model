@@ -67,6 +67,14 @@ module DynaModel
         end
       end
 
+      def table_prefix(val=nil)
+        if val
+          @dynamo_table_prefix = val
+        else
+          @dynamo_table_prefix || AWS::Record.table_prefix || "#{DynaModel::Config.namespace}#{Rails.application.class.parent_name.to_s.underscore.dasherize}-#{Rails.env}-"
+        end
+      end
+
       def hash_key(hash_key_key=nil)
         if hash_key_key
           hash_key_attribute = self.attributes[hash_key_key.to_s]

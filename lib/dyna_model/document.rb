@@ -12,8 +12,6 @@ module DynaModel
       class_attribute :read_only_attributes, :base_class
       self.base_class = self
 
-      AWS::Record.table_prefix = "#{DynaModel::Config.namespace}#{Rails.application.class.parent_name.to_s.underscore.dasherize}-#{Rails.env}-"
-
       extend ActiveModel::Translation
       extend ActiveModel::Callbacks
       extend AWS::Record::AbstractBase
@@ -176,7 +174,7 @@ module DynaModel
       end
 
       def dynamo_db_table_name(shard_name = nil)
-        "#{AWS::Record.table_prefix}#{self.shard_name(shard_name)}"
+        "#{self.table_prefix}#{self.shard_name(shard_name)}"
       end
 
       def dynamo_db_client(config={})
