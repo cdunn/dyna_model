@@ -96,6 +96,7 @@ end
 ```
 
 ## S3 Backup
+Persist DynaModel records for a particular model to S3 for extra backup. Intended for incremental backups of important records and not intended for low value records or models with high frequency writes.
 ```
 class Item
   include DynaModel::Document
