@@ -42,7 +42,7 @@ module DynaModel
 
         def dyna_model_s3_backup(options={})
           raise "DynaModel::Extensions::S3Backup requires a bucket." unless options[:bucket]
-          options[:prefix] ||= self.to_s.underscore
+          options[:prefix] ||= "#{self.to_s.underscore}-#{Rails.env}"
           #options[:after_save] = lambda { |obj| ... }
           @@dyna_model_s3_backup_config = options
         end
