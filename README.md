@@ -95,6 +95,21 @@ class Item
 end
 ```
 
+## S3 Backup
+```
+class Item
+  include DynaModel::Document
+  include DynaModel::Extensions::S3Backup
+  
+  dyna_model_s3_backup bucket: "dyna_model_backups", prefix: "items"
+  
+  # dyna_model_s3_backup bucket: "dyna_model_backups", prefix: "items", after_save: lambda { |item|
+  #   Item.delay.dyna_model_s3_backup_object(item.guid) # sidekiq write
+  # }
+end
+```
+
+
 ## AWS::Record
 * http://docs.aws.amazon.com/AWSRubySDK/latest/AWS/Record.html
 * https://github.com/aws/aws-sdk-ruby/blob/master/lib/aws/record/abstract_base.rb
