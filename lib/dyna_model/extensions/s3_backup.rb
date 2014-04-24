@@ -71,6 +71,11 @@ module DynaModel
           self.dyna_model_s3_backup_client.buckets.create(self.dyna_model_s3_backup_config[:bucket])
         end
 
+        # Helper for sidekiq/etc delay method on class
+        def dyna_model_s3_backup_object(guid)
+          self.read_guid(guid).try(:write_dyna_model_s3_backup!)
+        end
+
         # TODO: improve for high scale... ability to resume
         def import_from_dyna_model_s3_backup
           self.dyna_model_s3_backup_bucket.objects.with_prefix(self.dyna_model_s3_backup_config[:prefix]).each_batch do |batch|
