@@ -117,6 +117,7 @@ module DynaModel
       end
 
       def read_first(hash_value, options={})
+        options[:limit] = 1
         self.read_range(hash_value, options).first
       end
 
