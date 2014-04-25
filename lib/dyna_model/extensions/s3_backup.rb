@@ -1,3 +1,4 @@
+# TODO: S3 key schema that allows for timestamp sorting
 #
 # Persist DynaModel records for a particular model to S3 for extra backup.
 #

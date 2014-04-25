@@ -42,6 +42,11 @@ module DynaModel
       in: "IN"
     }
 
+    CONDITIONAL_OPERATOR = {
+      and: "AND",
+      or: "OR"
+    }
+
     COMPARISON_OPERATOR_SCAN_ONLY = [
       :ne, 
       :not_null,
@@ -51,24 +56,19 @@ module DynaModel
       :in
     ]
 
-    class << self
-
-
+    def self.type_from_value(value)
+      case
+      when value.kind_of?(AWS::DynamoDB::Binary) then :b
+      when value.respond_to?(:to_str) then :s
+      when value.kind_of?(Numeric) then :n
+      else
+        raise ArgumentError, "unsupported attribute type #{value.class}"
+      end
     end
 
-      def self.type_from_value(value)
-        case
-        when value.kind_of?(AWS::DynamoDB::Binary) then :b
-        when value.respond_to?(:to_str) then :s
-        when value.kind_of?(Numeric) then :n
-        else
-          raise ArgumentError, "unsupported attribute type #{value.class}"
-        end
-      end
-
-      def self.attr_with_type(attr_name, value)
-        { attr_name => { TYPE_INDICATOR[type_from_value(value)] => value.to_s } }
-      end
+    def self.attr_with_type(attr_name, value)
+      { attr_name => { TYPE_INDICATOR[type_from_value(value)] => value.to_s } }
+    end
 
     def initialize(model)
       @model = model
@@ -199,6 +199,7 @@ module DynaModel
       #AWS::DynamoDB::Errors::ValidationException: ALL_PROJECTED_ATTRIBUTES can be used only when Querying using an IndexName
       #options[:limit] ||= 10
       #options[:exclusive_start_key]
+      #options[:query_filter]
 
       key_conditions = {}
       gsi = nil
@@ -221,35 +222,33 @@ module DynaModel
       }
 
       if options[:range] 
-        raise ArgumentError, "Expected a 2 element Hash for :range (ex {:age.gt => 13})" unless options[:range].is_a?(Hash) && options[:range].keys.size == 1 && options[:range].keys.first.is_a?(String)
-        range_key_name, comparison_operator = options[:range].keys.first.split(".")
-        raise ArgumentError, "Comparison operator must be one of (#{(COMPARISON_OPERATOR.keys - COMPARISON_OPERATOR_SCAN_ONLY).join(", ")})" unless COMPARISON_OPERATOR.keys.include?(comparison_operator.to_sym)
-        range_key = @range_keys.find{|k| k[:attribute_name] == range_key_name}
+        raise ArgumentError, "Table does not use a range key in its schema!" if @range_keys.blank?
+        attr_with_condition_hash = self.attr_with_condition(options[:range])
+        range_key = @range_keys.find{|k| k[:attribute_name] == attr_with_condition_hash.keys.first}
         raise ArgumentError, ":range key must be a valid Range attribute" unless range_key
-        raise ArgumentError, ":range key must be a Range if using the operator BETWEEN" if comparison_operator == "between" && !options[:range].values.first.is_a?(Range)
 
         if range_key.has_key?(:index_name) # Local/Global Secondary Index
           options[:index_name] = range_key[:index_name]
           query_request[:index_name] = range_key[:index_name]
         end
 
-        range_value = options[:range].values.first
-        range_attribute_list = []
-        if comparison_operator == "between"
-          range_attribute_list << { range_key[:attribute_type] => range_value.min }
-          range_attribute_list << { range_key[:attribute_type] => range_value.max }
-        else
-          # TODO - support Binary?
-          range_attribute_list = [{ range_key[:attribute_type] => range_value.to_s }]
-        end
-
-        key_conditions.merge!({
-          range_key[:attribute_name] => {
-            attribute_value_list: range_attribute_list,
-            comparison_operator: COMPARISON_OPERATOR[comparison_operator.to_sym]
-          }
-        })
+        key_conditions.merge!(attr_with_condition_hash)
       end
+
+      query_filter = {}
+      conditional_operator = nil
+      if options[:query_filter]
+        raise ArgumentError, ":query_filter must be a hash" unless options[:query_filter].is_a?(Hash)
+        options[:query_filter].each_pair do |k,v| 
+          query_filter.merge!(self.attr_with_condition({ k => v}))
+        end
+        if options[:conditional_operator]
+          raise ArgumentError, ":condition_operator invalid! Must be one of (#{CONDITIONAL_OPERATOR.keys.join(", ")})" unless CONDITIONAL_OPERATOR[options[:conditional_operator]]
+          conditional_operator = CONDITIONAL_OPERATOR[options[:conditional_operator]]
+        end
+      end
+      query_request.merge!(query_filter: query_filter) unless query_filter.blank?
+      query_request.merge!(conditional_operator: conditional_operator) unless conditional_operator.blank? || query_filter.blank?
 
       if options[:global_secondary_index] # Override index_name if using GSI
         # You can only select projected attributes from a GSI
@@ -420,39 +419,67 @@ module DynaModel
 
       # :scan_filter => { :name.begins_with => "a" }
       scan_filter = {}
+      conditional_operator = nil
       if options[:scan_filter].present?
         options[:scan_filter].each_pair.each do |k,v|
-          # Hard to validate attribute types here, so infer by type sent and assume the user knows their own attrs
-          key_name, comparison_operator = k.split(".")
-          raise ArgumentError, "Comparison operator must be one of (#{COMPARISON_OPERATOR.keys.join(", ")})" unless COMPARISON_OPERATOR.keys.include?(comparison_operator.to_sym)
-          raise ArgumentError, "scan_filter value must be a Range if using the operator BETWEEN" if comparison_operator == "between" && !v.is_a?(Range)
-          raise ArgumentError, "scan_filter value must be a Array if using the operator IN" if comparison_operator == "in" && !v.is_a?(Array)
-
-          attribute_value_list = []
-          if comparison_operator == "in"
-            v.each do |in_v|
-              attribute_value_list << self.class.attr_with_type(key_name, in_v).values.last
-            end
-          elsif comparison_operator == "between"
-            attribute_value_list << self.class.attr_with_type(key_name, v.min).values.last
-            attribute_value_list << self.class.attr_with_type(key_name, v.max).values.last
-          else
-            attribute_value_list << self.class.attr_with_type(key_name, v).values.last
-          end
-          scan_filter.merge!({
-            key_name => {
-              comparison_operator: COMPARISON_OPERATOR[comparison_operator.to_sym],
-              attribute_value_list: attribute_value_list
-            }
-          })
+          scan_filter.merge!(self.attr_with_condition({ k => v}))
         end
-        scan_request.merge!(scan_filter: scan_filter)
       end
-
-      scan_request.merge!({ segment: options[:segment].to_i }) if options[:segment].present?
-      scan_request.merge!({ total_segments: options[:total_segments].to_i }) if options[:total_segments].present?
+      if options[:conditional_operator]
+        raise ArgumentError, ":condition_operator invalid! Must be one of (#{CONDITIONAL_OPERATOR.keys.join(", ")})" unless CONDITIONAL_OPERATOR[options[:conditional_operator]]
+        conditional_operator = CONDITIONAL_OPERATOR[options[:conditional_operator]]
+      end
+      scan_request.merge!(scan_filter: scan_filter) unless scan_filter.blank?
+      scan_request.merge!(conditional_operator: conditional_operator) unless conditional_operator.blank? || scan_filter.blank?
+      scan_request.merge!(segment: options[:segment].to_i) if options[:segment].present?
+      scan_request.merge!(total_segments: options[:total_segments].to_i) if options[:total_segments].present?
 
       @model.dynamo_db_client.scan(scan_request)
+    end
+
+    protected
+
+    # {:name.eq => "cary"}
+    #
+    # return:
+    #   {
+    #     "name" => {
+    #       attribute_value_list: [
+    #         "S" => "cary"
+    #       ],
+    #       comparison_operator: "EQ"
+    #     }
+    #   }
+    def attr_with_condition(attr_conditional)
+      raise ArgumentError, "Expected a 2 element Hash for each :query_filter (ex {:age.gt => 13})" unless attr_conditional.is_a?(Hash) && attr_conditional.keys.size == 1 && attr_conditional.keys.first.is_a?(String)
+      attr_name, comparison_operator = attr_conditional.keys.first.split(".")
+      raise ArgumentError, "Comparison operator must be one of (#{(COMPARISON_OPERATOR.keys - COMPARISON_OPERATOR_SCAN_ONLY).join(", ")})" unless COMPARISON_OPERATOR.keys.include?(comparison_operator.to_sym)
+      attr_key = @model.attributes[attr_name]
+      raise ArgumentError, "#{attr_name} not a valid attribute" unless attr_key
+      attr_type = @model.attribute_type_indicator(attr_key)
+      raise ArgumentError, "#{attr_name} key must be a Range if using the operator BETWEEN" if comparison_operator == "between" && !attr_conditional.values.first.is_a?(Range)
+      raise ArgumentError, ":query_filter value must be an Array if using the operator IN" if comparison_operator == "in" && !attr_conditional.values.first.is_a?(Array)
+
+      attr_value = attr_conditional.values.first
+
+      attribute_value_list = []
+      if comparison_operator == "in"
+        attr_conditional.values.first.each do |in_v|
+          attribute_value_list << { attr_type => in_v.to_s }
+        end
+      elsif comparison_operator == "between"
+        attribute_value_list << { attr_type => attr_value.min.to_s }
+        attribute_value_list << { attr_type => attr_value.max.to_s }
+      else
+        attribute_value_list = [{ attr_type => attr_value.to_s }]
+      end
+
+      {
+        attr_name => {
+          attribute_value_list: attribute_value_list,
+          comparison_operator: COMPARISON_OPERATOR[comparison_operator.to_sym]
+        }
+      }
     end
 
   end

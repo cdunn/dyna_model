@@ -80,6 +80,17 @@ describe "DynaModel::Query" do
     users.first.name.should == "Cary"
   end
 
+  it 'should read_range with :query_filter' do
+    @user = User.create(@user_attrs)
+    @user2 = User.create(@user2_attrs)
+    users = User.read_range("Dunn", query_filter: {:name.eq => "Cary"})
+    users.length.should == 1
+    users.first.name.should == "Cary"
+    users = User.read_range("Dunn", query_filter: {:name.in => ["Cary"]})
+    users.length.should == 1
+    users.first.name.should == "Cary"
+  end
+
   it 'should read_first' do
     @user = User.create(@user_attrs)
     User.read_first("Dunn", order: :asc).name.should == "Kate"

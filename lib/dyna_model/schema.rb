@@ -19,7 +19,7 @@ module DynaModel
         AWS::Record::Attributes::StringAttr => "S",
         AWS::Record::Attributes::IntegerAttr => "N",
         AWS::Record::Attributes::FloatAttr => "N",
-        AWS::Record::Attributes::BooleanAttr => "S",
+        AWS::Record::Attributes::BooleanAttr => "N",
         AWS::Record::Attributes::DateTimeAttr => "S",
         AWS::Record::Attributes::DateAttr => "S",
         AWS::Record::Attributes::SerializedAttr => "B"
