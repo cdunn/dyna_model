@@ -7,6 +7,13 @@ AWS DynamoDB ORM for Rails based on AWS::Record in the aws-sdk gem. Still a work
 gem 'dyna_model'
 ```
 
+## Supports
+* Range Querying
+* Scans
+* Local Secondary Indexes
+* Global Secondary Indexes
+* Query Filtering
+
 ## Sample Model
 ```
 class Dude
@@ -70,10 +77,9 @@ Dude.create_table
 Dude.delete_table
 
 # Rake tasks
-rake ddb:create CLASS=Dude
 rake ddb:create CLASS=all
-rake ddb:destroy CLASS=Dude
 rake ddb:destroy CLASS=all
+rake ddb:resize CLASS=all
 ```
 
 ## Elasticsearch::Model compatible adapter
