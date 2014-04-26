@@ -45,14 +45,68 @@ module DynaModel
       end
 
       # OVERRIDE
+      # https://github.com/aws/aws-sdk-ruby/blob/master/lib/aws/record/abstract_base.rb#L132
+      # pass options for 'expected'
+      public
+      def save opts = {}
+        if valid?(opts)
+          write_response = persisted? ? update(opts) : create(opts)
+          clear_changes!
+          if opts[:return_values] && opts[:return_values] != :none
+            # return the ReturnValues if the user wants them
+            write_response
+          else
+            true
+          end
+        else
+          false
+        end
+      end
+
+      # OVERRIDE
+      # https://github.com/aws/aws-sdk-ruby/blob/master/lib/aws/record/abstract_base.rb#L176
+      # and pass options for 'expected'
+      public
+      def delete(options={})
+        if persisted?
+          if deleted?
+            raise 'unable to delete, this object has already been deleted'
+          else
+            resp = delete_storage(options)
+            @_deleted = true
+            resp
+          end
+        else
+          raise 'unable to delete, this object has not been saved yet'
+        end
+      end
+      alias_method :destroy, :delete
+
+      # OVERRIDE
+      # https://github.com/aws/aws-sdk-ruby/blob/master/lib/aws/record/abstract_base.rb#L265
+      # pass options for 'expected'
+      private
+      def create(options={})
+        # Not implemented
+        #populate_id
+        touch_timestamps('created_at', 'updated_at')
+        # Not implemented
+        #increment_optimistic_lock_value
+        @_persisted = true
+        create_storage(options)
+      end
+
+      # OVERRIDE
       # https://github.com/aws/aws-sdk-ruby/blob/master/lib/aws/record/abstract_base.rb#L273
       # AWS::Record::AbstractBase to trigger update even without changes (for callbacks etc)
+      # and pass options for 'expected'
       private
-      def update
+      def update(options={})
         #return unless changed?
         touch_timestamps('updated_at')
-        increment_optimistic_lock_value
-        update_storage
+        # Not implemented
+        #increment_optimistic_lock_value
+        update_storage(options)
       end
     end
 

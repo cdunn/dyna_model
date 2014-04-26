@@ -18,6 +18,20 @@ module DynaModel
       ns: "NS"
     }
 
+    RETURN_VALUES = {
+      none: "NONE",
+      all_old: "ALL_OLD",
+      updated_old: "UPDATED_OLD",
+      all_new: "ALL_NEW",
+      updated_new: "UPDATED_NEW"
+    }
+
+    RETURN_VALUES_UPDATE_ONLY = [
+      :updated_old,
+      :all_new,
+      :updated_new
+    ]
+
     QUERY_SELECT = {
       all: "ALL_ATTRIBUTES",
       projected: "ALL_PROJECTED_ATTRIBUTES",
@@ -314,7 +328,21 @@ module DynaModel
 
     def write(attributes, options={})
       options[:return_consumed_capacity] ||= :none
+      options[:return_values] ||= :none
       options[:update_item] = false unless options[:update_item]
+
+      expected = {}
+      conditional_operator = nil
+      if options[:expected]
+        raise ArgumentError, ":expected must be a hash" unless options[:expected].is_a?(Hash)
+        options[:expected].each_pair do |k,v| 
+          expected.merge!(self.attr_with_condition({ k => v}))
+        end
+        if options[:conditional_operator]
+          raise ArgumentError, ":condition_operator invalid! Must be one of (#{CONDITIONAL_OPERATOR.keys.join(", ")})" unless CONDITIONAL_OPERATOR[options[:conditional_operator]]
+          conditional_operator = CONDITIONAL_OPERATOR[options[:conditional_operator]]
+        end
+      end
 
       if options[:update_item]
         # UpdateItem
@@ -345,12 +373,16 @@ module DynaModel
             })
           end
         end
+        raise ArgumentError, ":return_values must be one of (#{RETURN_VALUES.keys.join(", ")})" unless RETURN_VALUES[options[:return_values]]
         update_item_request = {
           table_name: @model.dynamo_db_table_name(options[:shard_name]),
           key: key_request,
           attribute_updates: attrs_to_update,
-          return_consumed_capacity: RETURNED_CONSUMED_CAPACITY[options[:return_consumed_capacity]]
+          return_consumed_capacity: RETURNED_CONSUMED_CAPACITY[options[:return_consumed_capacity]],
+          return_values: RETURN_VALUES[options[:return_values]]
         }
+        update_item_request.merge!(expected: expected) unless expected.blank?
+        update_item_request.merge!(conditional_operator: conditional_operator) unless conditional_operator.blank? || expected.blank?
         @model.dynamo_db_client.update_item(update_item_request)
       else
         # PutItem
@@ -359,22 +391,30 @@ module DynaModel
           next if v.blank? # If empty string or nil, skip...
           items.merge!(self.class.attr_with_type(k,v))
         end
+        raise ArgumentError, ":return_values must be one of (#{(RETURN_VALUES.keys - RETURN_VALUES_UPDATE_ONLY).join(", ")})" unless RETURN_VALUES[options[:return_values]] && !RETURN_VALUES_UPDATE_ONLY.include?(options[:return_values])
         put_item_request = {
           table_name: @model.dynamo_db_table_name(options[:shard_name]),
           item: items,
-          return_consumed_capacity: RETURNED_CONSUMED_CAPACITY[options[:return_consumed_capacity]]
+          return_consumed_capacity: RETURNED_CONSUMED_CAPACITY[options[:return_consumed_capacity]],
+          return_values: RETURN_VALUES[options[:return_values]]
         }
+        put_item_request.merge!(expected: expected) unless expected.blank?
+        put_item_request.merge!(conditional_operator: conditional_operator) unless conditional_operator.blank? || expected.blank?
         @model.dynamo_db_client.put_item(put_item_request)
       end
     end
 
     def delete_item(options={})
       raise ":delete_item => {...key_values...} required" unless options[:delete_item].present?
+      options[:return_consumed_capacity] ||= :none
+      options[:return_values] ||= :none
+      raise ArgumentError, ":return_values must be one of (#{(RETURN_VALUES.keys - RETURN_VALUES_UPDATE_ONLY).join(", ")})" unless RETURN_VALUES[options[:return_values]] && !RETURN_VALUES_UPDATE_ONLY.include?(options[:return_values])
       key_request = {
         @hash_key[:attribute_name] => {
           @hash_key[:attribute_type] => options[:delete_item][:hash_value].to_s
         }
       }
+
       if @primary_range_key
         raise ArgumentError, "range_key was not provided to the delete_item command" if options[:delete_item][:range_value].blank?
         key_request.merge!({
@@ -383,10 +423,28 @@ module DynaModel
           }
         })
       end
+
+      expected = {}
+      conditional_operator = nil
+      if options[:expected]
+        raise ArgumentError, ":expected must be a hash" unless options[:expected].is_a?(Hash)
+        options[:expected].each_pair do |k,v| 
+          expected.merge!(self.attr_with_condition({ k => v}))
+        end
+        if options[:conditional_operator]
+          raise ArgumentError, ":condition_operator invalid! Must be one of (#{CONDITIONAL_OPERATOR.keys.join(", ")})" unless CONDITIONAL_OPERATOR[options[:conditional_operator]]
+          conditional_operator = CONDITIONAL_OPERATOR[options[:conditional_operator]]
+        end
+      end
+
       delete_item_request = {
         table_name: @model.dynamo_db_table_name(options[:shard_name]),
-        key: key_request
+        key: key_request,
+        return_consumed_capacity: RETURNED_CONSUMED_CAPACITY[options[:return_consumed_capacity]],
+        return_values: RETURN_VALUES[options[:return_values]]
       }
+      delete_item_request.merge!(expected: expected) unless expected.blank?
+      delete_item_request.merge!(conditional_operator: conditional_operator) unless conditional_operator.blank? || expected.blank?
       @model.dynamo_db_client.delete_item(delete_item_request)
     end
 
@@ -474,12 +532,12 @@ module DynaModel
         attribute_value_list = [{ attr_type => attr_value.to_s }]
       end
 
-      {
-        attr_name => {
-          attribute_value_list: attribute_value_list,
-          comparison_operator: COMPARISON_OPERATOR[comparison_operator.to_sym]
-        }
+      attribute_comparison_hash = {
+        comparison_operator: COMPARISON_OPERATOR[comparison_operator.to_sym]
       }
+      attribute_comparison_hash.merge!(attribute_value_list: attribute_value_list) unless %w(null not_null).include?(comparison_operator)
+
+      { attr_name => attribute_comparison_hash }
     end
 
   end

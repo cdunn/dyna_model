@@ -3,6 +3,7 @@ require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
 describe "DynaModel::Persistence" do
 
   before do
+    User.delete_table
     User.create_table
     @user = User.new
     @user_attrs = {
@@ -76,6 +77,33 @@ describe "DynaModel::Persistence" do
     User.read("hash", 3).should_not be_nil
     user.destroy.should be_true
     User.read("hash", 3).should be_nil
+  end
+
+  it 'should respect :expected in a save' do
+    user = User.new(@user_attrs)
+
+    expect {
+      user.save
+    }.not_to raise_error
+
+    expect {
+      user.save(expected: {:name.eq => "wrongname"})
+    }.to raise_error(AWS::DynamoDB::Errors::ConditionalCheckFailedException)
+
+    user.save(expected: {:name.eq => "Kate"}, return_values: :all_old).should be_a AWS::Core::Response
+  end
+
+  it 'should respect :expected in a destroy' do
+    user = User.new(@user_attrs)
+    user.save
+
+    expect {
+      user.delete(expected: {:name.eq => "wrongname"})
+    }.to raise_error(AWS::DynamoDB::Errors::ConditionalCheckFailedException)
+
+    expect {
+      user.delete(expected: {:name.eq => "Kate"})
+    }.not_to raise_error
   end
 
 end

@@ -15,16 +15,16 @@ module DynaModel
     end
 
     private
-    def create_storage
+    def create_storage(options={})
       run_callbacks :save do
         run_callbacks :create do
-          self.class.dynamo_db_table.write(serialize_attributes)
+          self.class.dynamo_db_table.write(serialize_attributes, options)
         end
       end
     end
 
     private
-    def update_storage
+    def update_storage(options={})
       # Only enumerating dirty (i.e. changed) attributes.  Empty
       # (nil and empty set) values are deleted, the others are replaced.
       run_callbacks :save do
@@ -40,21 +40,21 @@ module DynaModel
             end
           end
 
-          self.class.dynamo_db_table.write(attr_updates, {
+          self.class.dynamo_db_table.write(attr_updates, options.merge({
             update_item: dynamo_db_item_key_values,
             shard_name: self.shard
-          })
+          }))
         end
       end
     end
 
     private
-    def delete_storage
+    def delete_storage(options={})
       run_callbacks :destroy do
-        self.class.dynamo_db_table.delete_item(
+        self.class.dynamo_db_table.delete_item(options.merge(
           delete_item: dynamo_db_item_key_values,
           shard_name: self.shard
-        )
+        ))
       end
     end
 
