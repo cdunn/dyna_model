@@ -11,16 +11,20 @@ module DynaModel
     extend Options
 
     # All the default options.
-    option :logger, :default => defined?(Rails)
-    option :read_provision, :default => 50
-    option :write_provision, :default => 10
+    option :logger, default: defined?(Rails)
+    option :read_provision, default: 50
+    option :write_provision, default: 10
     # TODO - default adapter client based on config
     #option :namespace, :default => defined?(Rails) ? "#{Rails.application.class.parent_name}_#{Rails.env}" : ""
-    option :endpoint, :default => 'dynamodb.us-west-2.amazonaws.com'
-    option :port, :default => 443
-    option :use_ssl, :default => true
-    option :default_guid_delimiter, :default => ":"
-    option :namespace, :default => ""
+    option :endpoint, default: 'dynamodb.us-west-2.amazonaws.com'
+    option :port, default: 443
+    option :use_ssl, default: true
+    option :default_guid_delimiter, default: ":"
+    option :namespace, default: ""
+
+    option :lock_extension_read_provision, default: 10
+    option :lock_extension_write_provision, default: 4
+    option :lock_extension_shard_name, default: "lock"
 
     # The default logger: either the Rails logger or just stdout.
     def default_logger

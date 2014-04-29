@@ -155,11 +155,11 @@ module DynaModel
       end
 
       if @schema_loaded_from_dynamo[:table][:provisioned_throughput][:read_capacity_units] != @table_schema[:provisioned_throughput][:read_capacity_units]
-        Toy::Dynamo::Config.logger.error "read_capacity_units mismatch. Need to update table?"
+        DynaModel::Config.logger.error "read_capacity_units mismatch. Need to update table?"
       end
 
       if @schema_loaded_from_dynamo[:table][:provisioned_throughput][:write_capacity_units] != @table_schema[:provisioned_throughput][:write_capacity_units]
-        Toy::Dynamo::Config.logger.error "write_capacity_units mismatch. Need to update table?"
+        DynaModel::Config.logger.error "write_capacity_units mismatch. Need to update table?"
       end
     end
 
@@ -513,6 +513,7 @@ module DynaModel
       attr_name, comparison_operator = attr_conditional.keys.first.split(".")
       raise ArgumentError, "Comparison operator must be one of (#{(COMPARISON_OPERATOR.keys - COMPARISON_OPERATOR_SCAN_ONLY).join(", ")})" unless COMPARISON_OPERATOR.keys.include?(comparison_operator.to_sym)
       attr_key = @model.attributes[attr_name]
+      attr_class = attr_key.class
       raise ArgumentError, "#{attr_name} not a valid attribute" unless attr_key
       attr_type = @model.attribute_type_indicator(attr_key)
       raise ArgumentError, "#{attr_name} key must be a Range if using the operator BETWEEN" if comparison_operator == "between" && !attr_conditional.values.first.is_a?(Range)
@@ -522,14 +523,14 @@ module DynaModel
 
       attribute_value_list = []
       if comparison_operator == "in"
-        attr_conditional.values.first.each do |in_v|
-          attribute_value_list << { attr_type => in_v.to_s }
+        attr_value.each do |in_v|
+          attribute_value_list << { attr_type => casted_attr_value(attr_class, in_v).to_s }
         end
       elsif comparison_operator == "between"
         attribute_value_list << { attr_type => attr_value.min.to_s }
         attribute_value_list << { attr_type => attr_value.max.to_s }
       else
-        attribute_value_list = [{ attr_type => attr_value.to_s }]
+        attribute_value_list = [{ attr_type => casted_attr_value(attr_class, attr_value).to_s }]
       end
 
       attribute_comparison_hash = {
@@ -538,6 +539,12 @@ module DynaModel
       attribute_comparison_hash.merge!(attribute_value_list: attribute_value_list) unless %w(null not_null).include?(comparison_operator)
 
       { attr_name => attribute_comparison_hash }
+    end
+
+    def casted_attr_value(attr_class, val)
+      casted = attr_class.type_cast(val)
+      return nil if casted.nil?
+      attr_class.serialize(casted)
     end
 
   end

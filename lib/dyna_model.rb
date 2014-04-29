@@ -14,9 +14,10 @@ require "dyna_model/table"
 require "dyna_model/query"
 require "dyna_model/response"
 require "dyna_model/validations"
+require "dyna_model/document"
 require "dyna_model/extensions/symbol"
 require "dyna_model/extensions/s3_backup"
-require "dyna_model/document"
+require "dyna_model/extensions/lock"
 
 module DynaModel
 
