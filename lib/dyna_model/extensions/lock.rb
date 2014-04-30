@@ -97,6 +97,29 @@ module DynaModel
         DynaModel::Config.logger.info "Condition failed to release lock '#{lock_name}'"
       end
 
+      def self.extend(lock_name, extension_time=5.seconds)
+        locked_at = DateTime.now
+        expires_at = locked_at + extension_time
+
+        lock_obj = self.new(
+          lock_name: lock_name,
+          locked_at: locked_at,
+          expires_at: expires_at,
+          locked_by: self.locked_by
+        )
+
+        if lock_obj.save(expected: {
+          :locked_by.eq => self.locked_by
+        })
+          DynaModel::Config.logger.info "Extended lock '#{lock_name}' for #{extension_time} seconds"
+          true
+        else
+          raise "Error extending lock: #{lock_obj.errors.full_messages.to_sentence}"
+        end
+      rescue AWS::DynamoDB::Errors::ConditionalCheckFailedException => e
+        DynaModel::Config.logger.info "Condition failed to extend lock '#{lock_name}'"
+      end
+
     end
   end
 end
