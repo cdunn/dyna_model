@@ -45,15 +45,15 @@ module DynaModel
           raise "DynaModel::Extensions::S3Backup requires a bucket." unless options[:bucket]
           options[:prefix] ||= "#{self.to_s.underscore.pluralize}-#{Rails.env}"
           #options[:after_save] = lambda { |obj| ... }
-          @@dyna_model_s3_backup_config = options
+          (@@dyna_model_s3_backup_config ||= {})[self.to_s] = options.dup
         end
 
         def dyna_model_s3_backup_client
-          @@dyna_model_s3_backup_client ||= AWS::S3.new
+          Thread.current[:dyna_model_s3_backup_client] ||= AWS::S3.new
         end
 
         def dyna_model_s3_backup_config
-          @@dyna_model_s3_backup_config
+          (@@dyna_model_s3_backup_config ||= {})[self.to_s]
         end
 
         def dyna_model_s3_backup_bucket

@@ -111,7 +111,7 @@ class Item
   dyna_model_s3_backup bucket: "dyna_model_backups", prefix: "items"
   
   # dyna_model_s3_backup bucket: "dyna_model_backups", prefix: "items", after_save: lambda { |item|
-  #   Item.delay.dyna_model_s3_backup_object(item.guid) # sidekiq write
+  #   Item.delay.dyna_model_s3_backup_object(item.dynamo_db_guid) # sidekiq write
   # }
 end
 ```
