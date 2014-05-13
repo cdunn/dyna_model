@@ -29,7 +29,7 @@ module DynaModel
       end
 
       def write_dyna_model_s3_backup!
-        self.class.dyna_model_s3_backup_bucket.objects[File.join(self.class.dyna_model_s3_backup_config[:prefix], "#{self.guid}.json")].write(self.to_dyna_model_s3_backup_json)
+        self.class.dyna_model_s3_backup_bucket.objects[File.join(self.class.dyna_model_s3_backup_config[:prefix], "#{self.dynamo_db_guid}.json")].write(self.to_dyna_model_s3_backup_json)
       end
 
       def to_dyna_model_s3_backup_json
@@ -86,9 +86,9 @@ module DynaModel
               obj = obj_json["class"].constantize.new
               obj.attributes = obj_json["attributes"]
               if obj.save
-                puts "Saved #{obj.guid}."
+                puts "Saved #{obj.dynamo_db_guid}."
               else
-                puts "Failed to save #{obj.guid}. #{obj.errors.full_messages.to_sentence}"
+                puts "Failed to save #{obj.dynamo_db_guid}. #{obj.errors.full_messages.to_sentence}"
               end
             end
           end

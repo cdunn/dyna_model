@@ -96,7 +96,7 @@ module DynaModel
         if range_key_key
           range_key_attribute = self.attributes[range_key_key.to_s]
           raise(ArgumentError, "Could not find attribute definition for range_key #{range_key_key}") unless range_key_attribute
-          raise(ArgumentError, "Invalid attribute type for range_key") unless [AWS::Record::Attributes::StringAttr, AWS::Record::Attributes::IntegerAttr, AWS::Record::Attributes::FloatAttr].include?(range_key_attribute.class)
+          raise(ArgumentError, "Invalid attribute type for range_key") unless [AWS::Record::Attributes::StringAttr, AWS::Record::Attributes::IntegerAttr, AWS::Record::Attributes::FloatAttr, AWS::Record::Attributes::DateAttr, AWS::Record::Attributes::DateTimeAttr].include?(range_key_attribute.class)
 
           validates_presence_of range_key_attribute.name.to_sym
 
