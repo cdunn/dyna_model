@@ -5,7 +5,7 @@ module DynaModel
     extend self
     def included_models
       dir = ENV['DIR'].to_s != '' ? ENV['DIR'] : Rails.root.join("app/models")
-      puts "Loading models from: #{dir}"
+      DynaModel::Config.logger.info "Loading models from: #{dir}"
       included = []
       Dir.glob(File.join("#{dir}/**/*.rb")).each do |path|
         model_filename = path[/#{Regexp.escape(dir.to_s)}\/([^\.]+).rb/, 1]
@@ -38,11 +38,11 @@ namespace :ddb do
     options.merge!(shard_name: ENV['SHARD']) if ENV['SHARD']
     if ENV["CLASS"] == "all"
       DynaModel::Tasks.included_models.each do |klass|
-        puts "Creating table for #{klass}..."
+        DynaModel::Config.logger.info "Creating table for #{klass}..."
         begin
           klass.create_table(options)
         rescue Exception => e
-          puts "Could not create table! #{e.inspect}"
+          DynaModel::Config.logger.info "Could not create table! #{e.inspect}"
         end
       end
     else
@@ -67,11 +67,11 @@ namespace :ddb do
     options.merge!(shard_name: ENV['SHARD']) if ENV['SHARD']
     if ENV["CLASS"] == "all"
       DynaModel::Tasks.included_models.each do |klass|
-        puts "Destroying table for #{klass}..."
+        DynaModel::Config.logger.info "Destroying table for #{klass}..."
         begin
           klass.delete_table(options)
         rescue Exception => e
-          puts "Could not create table! #{e.inspect}"
+          DynaModel::Config.logger.info "Could not create table! #{e.inspect}"
         end
       end
     else
