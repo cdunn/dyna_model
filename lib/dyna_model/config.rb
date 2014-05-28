@@ -25,6 +25,9 @@ module DynaModel
     option :lock_extension_read_provision, default: 10
     option :lock_extension_write_provision, default: 4
     option :lock_extension_shard_name, default: "lock"
+    
+    option :s3_backup_extension_enable_development, default: false
+    option :s3_backup_extension_development_environments, default: %w(development test)
 
     # The default logger: either the Rails logger or just stdout.
     def default_logger
