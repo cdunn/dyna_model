@@ -19,7 +19,10 @@ module DynaModel
       end
 
       def backup_dyna_model_record_to_s3
-        return if DynaModel::Config.s3_backup_extension_enable_development && DynaModel::Config.s3_backup_extension_development_environments.include?(Rails.env)
+        if DynaModel::Config.s3_backup_extension_enable_development || DynaModel::Config.s3_backup_extension_development_environments.include?(Rails.env)
+          DynaModel::Config.logger.info "Skipping S3Backup for #{self.class} #{self.dynamo_db_guid} in development environment."
+          return
+        end
         if self.class.dyna_model_s3_backup_config
           if self.class.dyna_model_s3_backup_config[:after_save]
             self.class.dyna_model_s3_backup_config[:after_save].call(self)
