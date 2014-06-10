@@ -18,7 +18,7 @@ module DynaModel
     def create_storage(options={})
       run_callbacks :save do
         run_callbacks :create do
-          self.class.dynamo_db_table.write(serialize_attributes, options)
+          self.class.dynamo_db_table.write(serialize_attributes, options.merge(shard_name: self.shard))
         end
       end
     end
