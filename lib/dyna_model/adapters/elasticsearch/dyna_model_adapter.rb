@@ -31,8 +31,6 @@ module Elasticsearch
         module Importing
 
           def __find_in_batches(options={}, &block)
-            items = []
-
             # Use 1/4 or read provision
             read_provision = self.dynamo_db_table.table_schema[:provisioned_throughput][:read_capacity_units]
             raise "read_provision not set for class!" unless read_provision
@@ -56,11 +54,7 @@ module Elasticsearch
 
               unless results_hash[:results].blank?
                 puts "Indexing #{results_hash[:results].size} results..."
-                batch_for_bulk = results_hash[:results].map { |a| { index: {
-                  _id: a.id,
-                  data: a.__elasticsearch__.as_indexed_json
-                } } }
-                yield batch_for_bulk
+                yield results_hash[:results]
               end
 
               # If more results to scan, sleep to throttle...
@@ -74,7 +68,13 @@ module Elasticsearch
               
               scan_idx += 1
             end
+          end
 
+          def __transform
+            lambda { |a| { index: {
+              _id: a.id,
+              data: a.as_indexed_json
+            } } }
           end
 
         end
