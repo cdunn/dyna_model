@@ -1,3 +1,4 @@
+require "aws-sdk-v1"
 require "aws-sdk"
 require "rails"
 require "active_support"

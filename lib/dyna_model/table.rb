@@ -474,6 +474,13 @@ module DynaModel
     end
 
     protected
+    def cast_hash_value
+      hash_key_type = @table_schema[:attribute_definitions].find{|h| h[:attribute_name] == hash_key}[:attribute_type]
+    end
+
+    def cast_range_value
+      hash_key_type = @table_schema[:attribute_definitions].find{|h| h[:attribute_name] == hash_key}[:attribute_type]
+    end
 
     # {:name.eq => "cary"}
     #

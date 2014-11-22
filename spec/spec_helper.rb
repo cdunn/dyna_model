@@ -6,24 +6,21 @@ MODELS = File.join(File.dirname(__FILE__), "app/models")
 require 'rspec'
 require 'dyna_model'
 require 'mocha'
+require 'aws-sdk-v1'
 require 'aws-sdk'
 
-ENV['ACCESS_KEY'] ||= 'abcd'
-ENV['SECRET_KEY'] ||= '1234'
+ENV['AWS_ACCESS_KEY_ID'] ||= 'abcd'
+ENV['AWS_SECRET_ACCESS_KEY'] ||= '1234'
 
 aws_config = {
-  access_key_id: ENV['ACCESS_KEY'],
-  secret_access_key: ENV['SECRET_KEY'],
-  dynamo_db_endpoint: 'localhost',
-  dynamo_db_port: '4567',
-  use_ssl: false
+  access_key_id: ENV['AWS_ACCESS_KEY_ID'],
+  secret_access_key: ENV['AWS_SECRET_ACCESS_KEY'],
+  region: "us-west-2"
 }
 AWS.config(aws_config)
 
 DynaModel::configure do |config|
-  config.endpoint = 'localhost'
-  config.port = 4567
-  config.use_ssl = false
+  config.endpoint = URI.parse('http://localhost:4567')
   config.read_provision = 5
   config.write_provision = 1
   config.namespace = 'test-'
@@ -39,7 +36,7 @@ RSpec.configure do |config|
   config.mock_with(:mocha)
 
   config.before(:each) do
-    client = AWS::DynamoDB::Client.new(aws_config.merge(api_version: '2012-08-10'))
+    client = Aws::DynamoDB::Client.new(aws_config.merge(endpoint: URI.parse('http://localhost:4567')))
     client.list_tables[:table_names].each do |table|
       if table =~ /^#{DynaModel::Config.namespace}/
         client.delete_table(table_name: table)
@@ -48,7 +45,7 @@ RSpec.configure do |config|
   end
 
   config.after(:suite) do
-    client = AWS::DynamoDB::Client.new(aws_config.merge(api_version: '2012-08-10'))
+    client = Aws::DynamoDB::Client.new(aws_config.merge(endpoint: URI.parse('http://localhost:4567')))
     client.list_tables[:table_names].each do |table|
       if table =~ /^#{DynaModel::Config.namespace}/
         client.delete_table(table_name: table)
