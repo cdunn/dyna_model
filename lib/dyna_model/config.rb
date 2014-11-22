@@ -16,9 +16,8 @@ module DynaModel
     option :write_provision, default: 10
     # TODO - default adapter client based on config
     #option :namespace, :default => defined?(Rails) ? "#{Rails.application.class.parent_name}_#{Rails.env}" : ""
-    option :endpoint, default: 'dynamodb.us-west-2.amazonaws.com'
-    option :port, default: 443
-    option :use_ssl, default: true
+    option :endpoint, default: nil # default
+    option :region, default: 'us-west-2'
     option :default_guid_delimiter, default: ":"
     option :namespace, default: ""
 

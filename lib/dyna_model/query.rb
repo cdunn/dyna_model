@@ -22,7 +22,7 @@ module DynaModel
         if self.range_key.nil?
           item_attrs = self.dynamo_db_table.get_item(hash_value, range_value_or_options || {})[:item]
           return nil if item_attrs.nil?
-          self.obj_from_attrs(Table.values_from_response_hash(item_attrs), (range_value_or_options || {}))
+          self.obj_from_attrs(item_attrs, (range_value_or_options || {}))
         else
           raise ArgumentError, "This table requires a range_key_value" if range_value_or_options.nil?
           self.read_range(hash_value, (options || {}).merge(range: { self.range_key[:attribute_name].to_sym.eq => range_value_or_options})).first
@@ -34,17 +34,16 @@ module DynaModel
         results_map = {}
         results_arr = []
         if keys.present?
-          results = self.dynamo_db_table.batch_get_item(keys, options)
-          results[:responses][self.dynamo_db_table_name(options[:shard_name])].each do |result|
-            attrs = Response.strip_attr_types(result)
-            obj = self.obj_from_attrs(attrs, options)
+          response = self.dynamo_db_table.batch_get_item(keys, options)
+          response.responses[self.dynamo_db_table_name(options[:shard_name])].each do |result|
+            obj = self.obj_from_attrs(result, options)
             if options[:format] == :array
               results_arr << obj
             else
               if self.dynamo_db_table.range_keys.present? && primary_range_key = self.dynamo_db_table.range_keys.find{|rk| rk[:primary_range_key] }
-                (results_map[attrs[self.dynamo_db_table.hash_key[:attribute_name]]] ||= {})[attrs[primary_range_key[:attribute_name]]] = obj
+                (results_map[result[self.dynamo_db_table.hash_key[:attribute_name]]] ||= {})[result[primary_range_key[:attribute_name]]] = obj
               else
-                results_map[attrs[self.dynamo_db_table.hash_key[:attribute_name]]] = obj
+                results_map[result[self.dynamo_db_table.hash_key[:attribute_name]]] = obj
               end
             end
           end
@@ -65,22 +64,19 @@ module DynaModel
         batch_size = options.delete(:batch) || DEFAULT_BATCH_SIZE
         max_results_limit = options[:limit]
         if options[:limit] && options[:limit] > batch_size
-          options.merge!(:limit => batch_size)
+          options.merge!(limit: batch_size)
         end
 
-        results = self.dynamo_db_table.query(hash_value, options)
-        response = Response.new(results)
-
-        results[:member].each do |result|
-          attrs = Response.strip_attr_types(result)
-          aggregated_results << self.obj_from_attrs(attrs, options)
+        response = self.dynamo_db_table.query(hash_value, options)
+        response.items.each do |result|
+          aggregated_results << self.obj_from_attrs(result, options)
         end
 
-        if response.more_results?
+        if response.last_evaluated_key
           results_returned = response.count
           batch_iteration = 0
           Timeout::timeout(QUERY_TIMEOUT) do
-            while response.more_results?
+            while response.last_evaluated_key
               if max_results_limit && (delta_results_limit = (max_results_limit-results_returned)) < batch_size
                 break if delta_results_limit == 0
                 options.merge!(limit: delta_results_limit)
@@ -88,11 +84,9 @@ module DynaModel
                 options.merge!(limit: batch_size)
               end
 
-              results = self.dynamo_db_table.query(hash_value, options.merge(exclusive_start_key: response.last_evaluated_key))
-              response = Response.new(results)
-              results[:member].each do |result|
-                attrs = Response.strip_attr_types(result)
-                aggregated_results << self.obj_from_attrs(attrs, options)
+              response = self.dynamo_db_table.query(hash_value, options.merge(exclusive_start_key: response.last_evaluated_key))
+              response.items.each do |result|
+                aggregated_results << self.obj_from_attrs(result, options)
               end
               results_returned += response.count
               batch_iteration += 1
@@ -112,8 +106,8 @@ module DynaModel
 
       def count_range(hash_value, options={})
         raise ArgumentError, "no range_key specified for this table" if self.dynamo_db_table.range_keys.blank?
-        results = self.dynamo_db_table.query(hash_value, options.merge(select: :count))
-        Response.new(results).count
+        response = self.dynamo_db_table.query(hash_value, options.merge(select: :count))
+        response.count
       end
 
       def read_first(hash_value, options={})
@@ -131,19 +125,16 @@ module DynaModel
         max_results_limit = options[:limit]
         options[:limit] = batch_size
 
-        results = self.dynamo_db_table.scan(options)
-        response = Response.new(results)
-
-        results[:member].each do |result|
-          attrs = Response.strip_attr_types(result)
-          aggregated_results << self.obj_from_attrs(attrs, options)
+        response = self.dynamo_db_table.scan(options)
+        response.items.each do |result|
+          aggregated_results << self.obj_from_attrs(result, options)
         end
 
-        if response.more_results? && !options[:manual_batching]
+        if response.last_evaluated_key && !options[:manual_batching]
           results_returned = response.count
           batch_iteration = 0
           Timeout::timeout(QUERY_TIMEOUT) do
-            while response.more_results?
+            while response.last_evaluated_key
               if max_results_limit && (delta_results_limit = (max_results_limit-results_returned)) < batch_size
                 break if delta_results_limit == 0
                 options.merge!(limit: delta_results_limit)
@@ -151,11 +142,9 @@ module DynaModel
                 options.merge!(limit: batch_size)
               end
 
-              results = dynamo_table.scan(options.merge(exclusive_start_key: response.last_evaluated_key))
-              response = Response.new(results)
-              results[:member].each do |result|
-                attrs = Response.strip_attr_types(result)
-                aggregated_results << self.obj_from_attrs(attrs, options)
+              response = dynamo_table.scan(options.merge(exclusive_start_key: response.last_evaluated_key))
+              response.items.each do |result|
+                aggregated_results << self.obj_from_attrs(result, options)
               end
               results_returned += response.count
               batch_iteration += 1
@@ -166,9 +155,9 @@ module DynaModel
         if options[:manual_batching]
           response_hash = {
             results: aggregated_results,
-            last_evaluated_key: results[:last_evaluated_key]
+            last_evaluated_key: response.last_evaluated_key
           }
-          response_hash.merge!(consumed_capacity: results[:consumed_capacity]) if results[:consumed_capacity]
+          response_hash.merge!(consumed_capacity: response.consumed_capacity) if response.consumed_capacity
           response_hash
         else
           aggregated_results

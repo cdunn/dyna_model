@@ -233,13 +233,13 @@ module DynaModel
 
       def dynamo_db_client(config={})
         options = {}
-        options[:use_ssl] = DynaModel::Config.use_ssl
-        options[:use_ssl] = config[:use_ssl] if config.has_key?(:use_ssl)
-        options[:dynamo_db_endpoint] = config[:endpoint] || DynaModel::Config.endpoint
-        options[:dynamo_db_port] = config[:port] || DynaModel::Config.port
-        options[:api_version] ||= config[:api_version] || '2012-08-10'
-
-        @dynamo_db_client ||= AWS::DynamoDB::Client.new(options)
+        options[:region] = config[:region] || DynaModel::Config.region
+        if endpoint = (config[:endpoint] || DynaModel::Config.endpoint)
+          options[:endpoint] = endpoint
+          raise "Expected endpoint to be a URI!" unless options[:endpoint].is_a?(URI)
+        end
+        raise "Expected api to be a Seahorse::Model::Api!" if options[:api] && options[:api].is_a?(Seahorse::Model::Api)
+        @dynamo_db_client ||= Aws::DynamoDB::Client.new(options)
       end
 
     end

@@ -80,10 +80,6 @@ module DynaModel
       end
     end
 
-    def self.attr_with_type(attr_name, value)
-      { attr_name => { TYPE_INDICATOR[type_from_value(value)] => value.to_s } }
-    end
-
     def initialize(model)
       @model = model
       @table_schema = model.table_schema
@@ -128,11 +124,11 @@ module DynaModel
     end
 
     def validate_key_schema
-      if @schema_loaded_from_dynamo[:table][:key_schema].sort_by { |k| k[:key_type] } != @table_schema[:key_schema].sort_by { |k| k[:key_type] }
+      if @schema_loaded_from_dynamo[:table][:key_schema].sort_by { |k| k[:key_type] }.map(&:to_h) != @table_schema[:key_schema].sort_by { |k| k[:key_type] }
         raise ArgumentError, "It appears your key schema (Hash Key/Range Key) have changed from the table definition. Rebuilding the table is necessary."
       end
 
-      if @schema_loaded_from_dynamo[:table][:attribute_definitions].sort_by { |k| k[:attribute_name] } != @table_schema[:attribute_definitions].sort_by { |k| k[:attribute_name] }
+      if @schema_loaded_from_dynamo[:table][:attribute_definitions].sort_by { |k| k[:attribute_name] }.map(&:to_h) != @table_schema[:attribute_definitions].sort_by { |k| k[:attribute_name] }
         raise ArgumentError, "It appears your attribute definition (types?) have changed from the table definition. Rebuilding the table is necessary."
       end
 
@@ -142,7 +138,7 @@ module DynaModel
         raise ArgumentError, "It appears your local secondary indexes have changed from the table definition. Rebuilding the table is necessary."
       end
       
-      if @schema_loaded_from_dynamo[:table][:local_secondary_indexes] && (@schema_loaded_from_dynamo[:table][:local_secondary_indexes].dup.collect {|i| i.delete_if{|k, v| index_keys_to_reject.include?(k) }; i }.sort_by { |lsi| lsi[:index_name] } != @table_schema[:local_secondary_indexes].sort_by { |lsi| lsi[:index_name] })
+      if @schema_loaded_from_dynamo[:table][:local_secondary_indexes] && (@schema_loaded_from_dynamo[:table][:local_secondary_indexes].map(&:to_h).collect {|i| i.delete_if{|k, v| index_keys_to_reject.include?(k) }; i }.sort_by { |lsi| lsi[:index_name] } != @table_schema[:local_secondary_indexes].sort_by { |lsi| lsi[:index_name] })
         raise ArgumentError, "It appears your local secondary indexes have changed from the table definition. Rebuilding the table is necessary."
       end
 
@@ -150,7 +146,7 @@ module DynaModel
         raise ArgumentError, "It appears your global secondary indexes have changed from the table definition. Rebuilding the table is necessary."
       end
 
-      if @schema_loaded_from_dynamo[:table][:global_secondary_indexes] && (@schema_loaded_from_dynamo[:table][:global_secondary_indexes].dup.collect {|i| i.delete_if{|k, v| index_keys_to_reject.include?(k) }; i }.sort_by { |gsi| gsi[:index_name] } != @table_schema[:global_secondary_indexes].sort_by { |gsi| gsi[:index_name] })
+      if @schema_loaded_from_dynamo[:table][:global_secondary_indexes] && (@schema_loaded_from_dynamo[:table][:global_secondary_indexes].map(&:to_h).collect {|i| i.delete_if{|k, v| index_keys_to_reject.include?(k) }; i }.sort_by { |gsi| gsi[:index_name] } != @table_schema[:global_secondary_indexes].sort_by { |gsi| gsi[:index_name] })
         raise ArgumentError, "It appears your global secondary indexes have changed from the table definition. Rebuilding the table is necessary."
       end
 
@@ -164,16 +160,13 @@ module DynaModel
     end
 
     def hash_key_item_param(value)
-      hash_key = @table_schema[:key_schema].find{|h| h[:key_type] == "HASH"}[:attribute_name]
-      hash_key_type = @table_schema[:attribute_definitions].find{|h| h[:attribute_name] == hash_key}[:attribute_type]
-      { hash_key => { hash_key_type => value.to_s } }
+      { @table_schema[:key_schema].find{|h| h[:key_type] == "HASH"}[:attribute_name] => value }
     end
 
     def hash_key_condition_param(hash_key, value)
-      hash_key_type = @table_schema[:attribute_definitions].find{|h| h[:attribute_name] == hash_key}[:attribute_type]
       {
         hash_key => {
-          attribute_value_list: [hash_key_type => value.to_s],
+          attribute_value_list: [value],
           comparison_operator: COMPARISON_OPERATOR[:eq]
         }
       }
@@ -196,6 +189,7 @@ module DynaModel
       else
         get_item_request.merge!( attributes_to_get: [options[:select]].flatten )
       end
+
       @model.dynamo_db_client.get_item(get_item_request)
     end
 
@@ -303,10 +297,10 @@ module DynaModel
         else
           hash_value = k
         end
-        key_request[@hash_key[:attribute_name]] = { @hash_key[:attribute_type] => hash_value.to_s }
+        key_request[@hash_key[:attribute_name]] = hash_value
         if @primary_range_key
           raise ArgumentError, "every key must include a range_value" if range_value.blank?
-          key_request[@primary_range_key[:attribute_name]] = { @primary_range_key[:attribute_type] => range_value.to_s }
+          key_request[@primary_range_key[:attribute_name]] = range_value
         end
         keys_request << key_request
       end
@@ -336,7 +330,7 @@ module DynaModel
       if options[:expected]
         raise ArgumentError, ":expected must be a hash" unless options[:expected].is_a?(Hash)
         options[:expected].each_pair do |k,v| 
-          expected.merge!(self.attr_with_condition({ k => v}))
+          expected.merge!(self.attr_with_condition({ k => v }))
         end
         if options[:conditional_operator]
           raise ArgumentError, ":condition_operator invalid! Must be one of (#{CONDITIONAL_OPERATOR.keys.join(", ")})" unless CONDITIONAL_OPERATOR[options[:conditional_operator]]
@@ -346,18 +340,10 @@ module DynaModel
 
       if options[:update_item]
         # UpdateItem
-        key_request = {
-          @hash_key[:attribute_name] => {
-            @hash_key[:attribute_type] => options[:update_item][:hash_value].to_s,
-          }
-        }
+        key_request = { @hash_key[:attribute_name] => options[:update_item][:hash_value] }
         if @primary_range_key
           raise ArgumentError, "range_key was not provided to the write command" if options[:update_item][:range_value].blank?
-          key_request.merge!({
-            @primary_range_key[:attribute_name] => {
-              @primary_range_key[:attribute_type] => options[:update_item][:range_value].to_s
-            }
-          })
+          key_request.merge!({ @primary_range_key[:attribute_name] => options[:update_item][:range_value] })
         end
         attrs_to_update = {}
         attributes.each_pair do |k,v|
@@ -367,7 +353,7 @@ module DynaModel
           else
             attrs_to_update.merge!({
               k => {
-                value: self.class.attr_with_type(k,v).values.last,
+                value: v,
                 action: "PUT"
               }
             })
@@ -389,7 +375,7 @@ module DynaModel
         items = {}
         attributes.each_pair do |k,v|
           next if v.blank? # If empty string or nil, skip...
-          items.merge!(self.class.attr_with_type(k,v))
+          items.merge!({ k => v })
         end
         raise ArgumentError, ":return_values must be one of (#{(RETURN_VALUES.keys - RETURN_VALUES_UPDATE_ONLY).join(", ")})" unless RETURN_VALUES[options[:return_values]] && !RETURN_VALUES_UPDATE_ONLY.include?(options[:return_values])
         put_item_request = {
@@ -409,19 +395,11 @@ module DynaModel
       options[:return_consumed_capacity] ||= :none
       options[:return_values] ||= :none
       raise ArgumentError, ":return_values must be one of (#{(RETURN_VALUES.keys - RETURN_VALUES_UPDATE_ONLY).join(", ")})" unless RETURN_VALUES[options[:return_values]] && !RETURN_VALUES_UPDATE_ONLY.include?(options[:return_values])
-      key_request = {
-        @hash_key[:attribute_name] => {
-          @hash_key[:attribute_type] => options[:delete_item][:hash_value].to_s
-        }
-      }
+      key_request = { @hash_key[:attribute_name] => options[:delete_item][:hash_value] }
 
       if @primary_range_key
         raise ArgumentError, "range_key was not provided to the delete_item command" if options[:delete_item][:range_value].blank?
-        key_request.merge!({
-          @primary_range_key[:attribute_name] => {
-            @primary_range_key[:attribute_type] => options[:delete_item][:range_value].to_s
-          }
-        })
+        key_request.merge!({ @primary_range_key[:attribute_name] => options[:delete_item][:range_value] })
       end
 
       expected = {}
@@ -429,7 +407,7 @@ module DynaModel
       if options[:expected]
         raise ArgumentError, ":expected must be a hash" unless options[:expected].is_a?(Hash)
         options[:expected].each_pair do |k,v| 
-          expected.merge!(self.attr_with_condition({ k => v}))
+          expected.merge!(self.attr_with_condition({ k => v }))
         end
         if options[:conditional_operator]
           raise ArgumentError, ":condition_operator invalid! Must be one of (#{CONDITIONAL_OPERATOR.keys.join(", ")})" unless CONDITIONAL_OPERATOR[options[:conditional_operator]]
@@ -524,13 +502,13 @@ module DynaModel
       attribute_value_list = []
       if comparison_operator == "in"
         attr_value.each do |in_v|
-          attribute_value_list << { attr_type => casted_attr_value(attr_class, in_v).to_s }
+          attribute_value_list << casted_attr_value(attr_class, in_v)
         end
       elsif comparison_operator == "between"
-        attribute_value_list << { attr_type => attr_value.min.to_s }
-        attribute_value_list << { attr_type => attr_value.max.to_s }
+        attribute_value_list << attr_value.min
+        attribute_value_list << attr_value.max
       else
-        attribute_value_list = [{ attr_type => casted_attr_value(attr_class, attr_value).to_s }]
+        attribute_value_list = [casted_attr_value(attr_class, attr_value)]
       end
 
       attribute_comparison_hash = {
