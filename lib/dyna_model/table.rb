@@ -160,13 +160,14 @@ module DynaModel
     end
 
     def hash_key_item_param(value)
-      { @table_schema[:key_schema].find{|h| h[:key_type] == "HASH"}[:attribute_name] => value }
+      hash_key = @table_schema[:key_schema].find{|h| h[:key_type] == "HASH"}[:attribute_name]
+      { hash_key => cast_hash_value(value) }
     end
 
     def hash_key_condition_param(hash_key, value)
       {
         hash_key => {
-          attribute_value_list: [value],
+          attribute_value_list: [cast_attr_value(hash_key, value)],
           comparison_operator: COMPARISON_OPERATOR[:eq]
         }
       }
@@ -248,7 +249,7 @@ module DynaModel
       if options[:query_filter]
         raise ArgumentError, ":query_filter must be a hash" unless options[:query_filter].is_a?(Hash)
         options[:query_filter].each_pair do |k,v| 
-          query_filter.merge!(self.attr_with_condition({ k => v}))
+          query_filter.merge!(self.attr_with_condition({ k => v }))
         end
         if options[:conditional_operator]
           raise ArgumentError, ":condition_operator invalid! Must be one of (#{CONDITIONAL_OPERATOR.keys.join(", ")})" unless CONDITIONAL_OPERATOR[options[:conditional_operator]]
@@ -294,9 +295,11 @@ module DynaModel
         key_request = {}
         if @primary_range_key
           hash_value, range_value = k.split(@model.guid_delimiter)
+          range_value = cast_range_value(range_value)
         else
           hash_value = k
         end
+        hash_value = cast_hash_value(hash_value)
         key_request[@hash_key[:attribute_name]] = hash_value
         if @primary_range_key
           raise ArgumentError, "every key must include a range_value" if range_value.blank?
@@ -340,10 +343,10 @@ module DynaModel
 
       if options[:update_item]
         # UpdateItem
-        key_request = { @hash_key[:attribute_name] => options[:update_item][:hash_value] }
+        key_request = { @hash_key[:attribute_name] => cast_attr_value(@hash_key[:attribute_name], options[:update_item][:hash_value]) }
         if @primary_range_key
           raise ArgumentError, "range_key was not provided to the write command" if options[:update_item][:range_value].blank?
-          key_request.merge!({ @primary_range_key[:attribute_name] => options[:update_item][:range_value] })
+          key_request.merge!({ @primary_range_key[:attribute_name] => cast_attr_value(@primary_range_key[:attribute_name], options[:update_item][:range_value]) })
         end
         attrs_to_update = {}
         attributes.each_pair do |k,v|
@@ -353,7 +356,7 @@ module DynaModel
           else
             attrs_to_update.merge!({
               k => {
-                value: v,
+                value: cast_attr_value(k, v),
                 action: "PUT"
               }
             })
@@ -369,13 +372,14 @@ module DynaModel
         }
         update_item_request.merge!(expected: expected) unless expected.blank?
         update_item_request.merge!(conditional_operator: conditional_operator) unless conditional_operator.blank? || expected.blank?
+        # raise update_item_request.inspect
         @model.dynamo_db_client.update_item(update_item_request)
       else
         # PutItem
         items = {}
         attributes.each_pair do |k,v|
           next if v.blank? # If empty string or nil, skip...
-          items.merge!({ k => v })
+          items.merge!({ k => cast_attr_value(k, v) })
         end
         raise ArgumentError, ":return_values must be one of (#{(RETURN_VALUES.keys - RETURN_VALUES_UPDATE_ONLY).join(", ")})" unless RETURN_VALUES[options[:return_values]] && !RETURN_VALUES_UPDATE_ONLY.include?(options[:return_values])
         put_item_request = {
@@ -395,11 +399,11 @@ module DynaModel
       options[:return_consumed_capacity] ||= :none
       options[:return_values] ||= :none
       raise ArgumentError, ":return_values must be one of (#{(RETURN_VALUES.keys - RETURN_VALUES_UPDATE_ONLY).join(", ")})" unless RETURN_VALUES[options[:return_values]] && !RETURN_VALUES_UPDATE_ONLY.include?(options[:return_values])
-      key_request = { @hash_key[:attribute_name] => options[:delete_item][:hash_value] }
+      key_request = { @hash_key[:attribute_name] => cast_attr_value(@hash_key[:attribute_name], options[:delete_item][:hash_value]) }
 
       if @primary_range_key
         raise ArgumentError, "range_key was not provided to the delete_item command" if options[:delete_item][:range_value].blank?
-        key_request.merge!({ @primary_range_key[:attribute_name] => options[:delete_item][:range_value] })
+        key_request.merge!({ @primary_range_key[:attribute_name] => cast_attr_value(@primary_range_key[:attribute_name], options[:delete_item][:range_value]) })
       end
 
       expected = {}
@@ -458,7 +462,7 @@ module DynaModel
       conditional_operator = nil
       if options[:scan_filter].present?
         options[:scan_filter].each_pair.each do |k,v|
-          scan_filter.merge!(self.attr_with_condition({ k => v}))
+          scan_filter.merge!(self.attr_with_condition({ k => v }))
         end
       end
       if options[:conditional_operator]
@@ -474,12 +478,33 @@ module DynaModel
     end
 
     protected
-    def cast_hash_value
-      hash_key_type = @table_schema[:attribute_definitions].find{|h| h[:attribute_name] == hash_key}[:attribute_type]
+
+    def cast_attr_value(attr_name, v)
+      attr_key = @model.attributes[attr_name]
+      raise ArgumentError, "#{attr_name} not a valid attribute" unless attr_key
+      attr_class = attr_key.class
+      # attr_type = @model.attribute_type_indicator(attr_key)
+      cast_attr_value_from_class(attr_class, v)
     end
 
-    def cast_range_value
-      hash_key_type = @table_schema[:attribute_definitions].find{|h| h[:attribute_name] == hash_key}[:attribute_type]
+    def cast_attr_value_from_class(attr_class, v)
+      casted = attr_class.type_cast(v)
+      return nil if casted.nil?
+      attr_class.serialize(casted)
+    end
+
+    # Ensure hash value is of appropriate type
+    def cast_hash_value(v)
+      hash_key = @table_schema[:key_schema].find{|h| h[:key_type] == "HASH"}[:attribute_name]
+      # hash_key_type = @table_schema[:attribute_definitions].find{|h| h[:attribute_name] == hash_key}[:attribute_type]
+      cast_attr_value(hash_key, v)
+    end
+
+    # Ensure range value is of appropriate type
+    def cast_range_value(v)
+      range_key = @table_schema[:key_schema].find{|h| h[:key_type] == "RANGE"}[:attribute_name]
+      # range_key_type = @table_schema[:attribute_definitions].find{|h| h[:attribute_name] == range_key}[:attribute_type]
+      cast_attr_value(range_key, v)
     end
 
     # {:name.eq => "cary"}
@@ -497,10 +522,6 @@ module DynaModel
       raise ArgumentError, "Expected a 2 element Hash for each :query_filter (ex {:age.gt => 13})" unless attr_conditional.is_a?(Hash) && attr_conditional.keys.size == 1 && attr_conditional.keys.first.is_a?(String)
       attr_name, comparison_operator = attr_conditional.keys.first.split(".")
       raise ArgumentError, "Comparison operator must be one of (#{(COMPARISON_OPERATOR.keys - COMPARISON_OPERATOR_SCAN_ONLY).join(", ")})" unless COMPARISON_OPERATOR.keys.include?(comparison_operator.to_sym)
-      attr_key = @model.attributes[attr_name]
-      attr_class = attr_key.class
-      raise ArgumentError, "#{attr_name} not a valid attribute" unless attr_key
-      attr_type = @model.attribute_type_indicator(attr_key)
       raise ArgumentError, "#{attr_name} key must be a Range if using the operator BETWEEN" if comparison_operator == "between" && !attr_conditional.values.first.is_a?(Range)
       raise ArgumentError, ":query_filter value must be an Array if using the operator IN" if comparison_operator == "in" && !attr_conditional.values.first.is_a?(Array)
 
@@ -509,13 +530,13 @@ module DynaModel
       attribute_value_list = []
       if comparison_operator == "in"
         attr_value.each do |in_v|
-          attribute_value_list << casted_attr_value(attr_class, in_v)
+          attribute_value_list << cast_attr_value(attr_name, in_v)
         end
       elsif comparison_operator == "between"
         attribute_value_list << attr_value.min
         attribute_value_list << attr_value.max
       else
-        attribute_value_list = [casted_attr_value(attr_class, attr_value)]
+        attribute_value_list = [cast_attr_value(attr_name, attr_value)]
       end
 
       attribute_comparison_hash = {
@@ -524,12 +545,6 @@ module DynaModel
       attribute_comparison_hash.merge!(attribute_value_list: attribute_value_list) unless %w(null not_null).include?(comparison_operator)
 
       { attr_name => attribute_comparison_hash }
-    end
-
-    def casted_attr_value(attr_class, val)
-      casted = attr_class.type_cast(val)
-      return nil if casted.nil?
-      attr_class.serialize(casted)
     end
 
   end

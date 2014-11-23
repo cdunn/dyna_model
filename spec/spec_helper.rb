@@ -32,6 +32,8 @@ Dir["#{File.dirname(__FILE__)}/support/**/*.rb"].each {|f| require f}
 
 Dir[ File.join(MODELS, "*.rb") ].sort.each { |file| require file }
 
+I18n.enforce_available_locales = false
+
 RSpec.configure do |config|
   config.mock_with(:mocha)
 

@@ -41,9 +41,9 @@ module DynaModel
               results_arr << obj
             else
               if self.dynamo_db_table.range_keys.present? && primary_range_key = self.dynamo_db_table.range_keys.find{|rk| rk[:primary_range_key] }
-                (results_map[result[self.dynamo_db_table.hash_key[:attribute_name]]] ||= {})[result[primary_range_key[:attribute_name]]] = obj
+                (results_map[obj.send(:[], self.dynamo_db_table.hash_key[:attribute_name])] ||= {})[obj.send(:[], primary_range_key[:attribute_name])] = obj
               else
-                results_map[result[self.dynamo_db_table.hash_key[:attribute_name]]] = obj
+                results_map[obj.send(:[], self.dynamo_db_table.hash_key[:attribute_name])] = obj
               end
             end
           end

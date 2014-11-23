@@ -80,6 +80,14 @@ describe "DynaModel::Query" do
     users.first.name.should == "Cary"
   end
 
+  it 'should read_range with int :global_secondary_index' do
+    @user = User.create(@user_attrs)
+    @user2 = User.create(@user2_attrs)
+    users = User.read_range(2, global_secondary_index: :intous_index)
+    users.length.should == 1
+    users.first.name.should == "Cary"
+  end
+
   it 'should read_range with :query_filter' do
     @user = User.create(@user_attrs)
     @user2 = User.create(@user2_attrs)
@@ -112,9 +120,9 @@ describe "DynaModel::Query" do
     @user2 = User.create(@user2_attrs)
     multi = User.read_multiple([@user.dynamo_db_guid, @user2.dynamo_db_guid])
     multi[@user.hashy].should_not be_nil
-    multi[@user.hashy][@user.ranger.to_s].should_not be_nil
+    multi[@user.hashy][@user.ranger].should_not be_nil
     multi[@user2.hashy].should_not be_nil
-    multi[@user2.hashy][@user2.ranger.to_s].should_not be_nil
+    multi[@user2.hashy][@user2.ranger].should_not be_nil
   end
 
   it 'should scan' do

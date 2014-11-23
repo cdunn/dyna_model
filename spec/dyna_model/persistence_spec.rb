@@ -88,9 +88,9 @@ describe "DynaModel::Persistence" do
 
     expect {
       user.save(expected: {:name.eq => "wrongname"})
-    }.to raise_error(AWS::DynamoDB::Errors::ConditionalCheckFailedException)
+    }.to raise_error(Aws::DynamoDB::Errors::ConditionalCheckFailedException)
 
-    user.save(expected: {:name.eq => "Kate"}, return_values: :all_old).should be_a AWS::Core::Response
+    user.save(expected: {:name.eq => "Kate"}, return_values: :all_old).should be_a Aws::PageableResponse
   end
 
   it 'should respect :expected in a destroy' do
@@ -99,7 +99,7 @@ describe "DynaModel::Persistence" do
 
     expect {
       user.delete(expected: {:name.eq => "wrongname"})
-    }.to raise_error(AWS::DynamoDB::Errors::ConditionalCheckFailedException)
+    }.to raise_error(Aws::DynamoDB::Errors::ConditionalCheckFailedException)
 
     expect {
       user.delete(expected: {:name.eq => "Kate"})

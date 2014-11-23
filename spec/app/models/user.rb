@@ -18,6 +18,7 @@ class User
 
   local_secondary_index :name
   global_secondary_index(:name_index, { hash_key: :name, projection: [:name] })
+  global_secondary_index(:intous_index, { hash_key: :intous, projection: [:name ,:born] })
 
   read_provision 4
   write_provision 4
