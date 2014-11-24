@@ -20,6 +20,14 @@ describe "DynaModel::Query" do
       born: 27.year.ago.to_date,
       intous: 2
     }
+
+    @user3_attrs = {
+      hashy: "Cary",
+      ranger: 3,
+      name: "Dunn",
+      born: 100.year.ago.to_date,
+      intous: 3
+    }
   end
 
   it 'should read_guid' do
@@ -132,6 +140,14 @@ describe "DynaModel::Query" do
     User.scan.length.should == 2
     User.scan(scan_filter: { :name.begins_with => "C" }).length.should == 1
     User.scan(scan_filter: { :intous.between => 1..2 }).length.should == 2
+  end
+
+  it 'should paginate' do
+    @user = User.create(@user_attrs)
+    @user2 = User.create(@user2_attrs)
+    @user3 = User.create(@user3_attrs)
+    expect(User.scan(batch: 1).size).to eq 3
+    expect(User.scan(limit: 1).size).to eq 1
   end
 
 end

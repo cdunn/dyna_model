@@ -1,3 +1,3 @@
 module DynaModel
-  VERSION = "0.0.15"
+  VERSION = "0.1.1.pre"
 end

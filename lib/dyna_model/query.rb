@@ -124,6 +124,7 @@ module DynaModel
         batch_size = options.delete(:batch) || DEFAULT_BATCH_SIZE
         max_results_limit = options[:limit]
         options[:limit] = batch_size
+        options[:limit] = max_results_limit if max_results_limit && max_results_limit < batch_size
 
         response = self.dynamo_db_table.scan(options)
         response.items.each do |result|
@@ -142,7 +143,7 @@ module DynaModel
                 options.merge!(limit: batch_size)
               end
 
-              response = dynamo_table.scan(options.merge(exclusive_start_key: response.last_evaluated_key))
+              response = self.dynamo_db_table.scan(options.merge(exclusive_start_key: response.last_evaluated_key))
               response.items.each do |result|
                 aggregated_results << self.obj_from_attrs(result, options)
               end
